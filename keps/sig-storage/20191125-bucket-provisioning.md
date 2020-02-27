@@ -13,10 +13,10 @@ reviewers:
   - "@travisn"
 approvers:
   - TBD
-- editor: TBD
-- creation-date: 2019-11-25
-- last-updated: 2020-02-27
-- status: provisional
+editor: TBD
+creation-date: 2019-11-25
+last-updated: 2020-02-27
+status: provisional
 ---
 
 # Object Bucket Provisioning
