@@ -55,19 +55,18 @@ File and block are first class citizens within the Kubernetes ecosystem.  Object
 + Minimize permissions needed to do a task.
 + Minimize technical ramp-up for storage vendors.
 + Be un-opinionated about the underlying object-store.
-+ Use Kubernetes Secrets to inject bucket information into application workflows
++ Use Kubernetes Secrets to inject bucket information into application workflows.
 + Present similar workflows for both _greenfield_  and _brownfield_ bucket provisioning.
 + Present a design that is familiar to CSI storage plugin authors and Kubernetes storage admins.
-+ Operations must be idempotent in order to handle failure recovery.
 
 ## Non-Goals
 + Define a native _data-plane_ object store API which would greatly improve object store app portability.
 
 ## Vocabulary
 +  _Brownfield_ - buckets created outside the COSI system but granted access via COSI.
-+ _Bucket_ - A container where objects reside, similar to a POSIX directory.
++ _Bucket_ - A namespace where objects reside, similar to a flat POSIX directory.
 + _BucketClass_ (BC) - A provisioner-namespaced custom resource containing fields defining the provisioner and immutable parameter set(s).  Referenced by ObjectBucketClaims and populated into the OB.  Only used for provisioning new buckets.
-+ _Container Object Storage Interface (COSI)_ -  The specification of gRPC data and methods making up the communication protocol between the provisioner and the sidecar.
++ _Container Object Storage Interface (COSI)_ -  The specification of gRPC data and methods making up the communication protocol between the plugin and the sidecar.
 + _COSI Controller_ - A single, centralized controller which manages OBCs, OBs, and Secrets cluster-wide.
 + _Greenfield_ - new buckets dynamically created by a provisioner (plugin).
 + _OB_ (Object Bucket) - A provisioner-namespaced custom resource representing the provisioned bucket and relevant metadata.
@@ -84,10 +83,9 @@ File and block are first class citizens within the Kubernetes ecosystem.  Object
   
     + Responsible for the binding relationship of OBs and OBCs
 + The Plugin and Sidecar containers run together in a single Pod, which may be managed by a Deployment.
-  
     + The gRPC connection is made through the Pod’s localhost.
 + No node affinity or other requirements exist.
-
++ Operations must be idempotent in order to handle failure recovery.
   
 ## Workflows
 
@@ -153,7 +151,7 @@ metadata:
 spec:
   bucketName: [3]
   generateBucketName: [4]
-  bucketClassRef [5]
+  bucketClassRef: [5]
     name:
     namespace:
   objectBucketRef: [6]
@@ -213,13 +211,12 @@ status:
   phase: {"Bound", "Released", "Failed", “Errored”} [11]
   conditions: []ObjectBucketCondition
 ```
-1. `name`: Generated in the pattern of “obc-”<OBC-NAMESPACE>-<OBC-NAME>
+1. `name`: Generated in the pattern of “obc-”\<OBC-NAMESPACE>"-"\<OBC-NAME>
 1. `namespace`: The namespace of the Plugin.
 1. `labels`: COSI Controller adds the label to its managed resources for easy GET ops.  Value is the plugin name returned by GetDriverInfo() rpc*.
 1. `finalizers`: Set and cleared by the COSIController and prevents accidental deletion of an OB.
-   replaced by a dash (-).
 1. `bucketClassRef`: Name and namespace of the bucket class
-1. `releasePolicy`: release policy from the Bucket Class referenced in the OBC.
+1. `releasePolicy`: release policy from the Bucket Class referenced in the OBC. See `BucketClass` spec for values.
 1. `bucketConfig`: a string:string map of plugin defined key-value pairs
 1. `objectBucketClaimReference`: the name & namespace of the bound OBC.
 1. `secretReference`: the name & namespace of Sidecar-generated secret. 
@@ -251,7 +248,7 @@ releasePolicy: {"Delete", "Retain"} [5]
 
 1. `namespace`: BucketClasses are co-namespaced with their associated plugin
 1. `plugin`: Name of the plugin, provided via the GetDriverInfo() rpc. Used to filter OBs.
-1. `defaultConfig`: key-value pairs used as defaults by the provisioner. May be overridden by OBCs.
+1. `defaultConfig`: key-value pairs used as defaults by the plugin. May be overridden by OBCs.
 1. `enforceConfig`: key-value pairs which override OBC keys of the same name (e.g. max object count)
 1.  `releasePolicy`: Prescribes outcome of an OBC/OB deletion.
     - `Delete`:  the bucket and its contents are destroyed
