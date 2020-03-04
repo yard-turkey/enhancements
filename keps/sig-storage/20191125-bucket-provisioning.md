@@ -83,16 +83,16 @@ File and block are first class citizens within the Kubernetes ecosystem.  Object
 
 #### Admin
 
-- As a cluster administrator, I can set generated buckets' storage capacity via the Kubernete's API, so that workloads may not inordinately contribute to monthly infrastructure costs.
+- As a cluster administrator, I can set quotas and resource limits on generated buckets' storage capacity via the Kubernete's API, so that  I can control monthly infrastructure costs.
 - As a cluster administrator, I can use Kubernetes RBAC policies around bucket APIs, so that I may control access to existing buckets from within the cluster, reducing the need to adminster an external storage interface.
-- As a cluster administrator, I can manage multiple object store providers via the Kubernetes interface, so that I do not have to become an expert in multiple, drastically different storage interfaces.
+- As a cluster administrator, I can manage multiple object store providers via the Kubernetes interface, so that I do not have to become an expert in several different storage interfaces.
 
 #### User
 
 - As a developer, I can define my object storage needs in the same manifest as my workload, so that deployments are streamlined and encapsulated within the Kubernetes interface.
 - As a developer, I can define a manifest containing my workload and object storage configuration once, so that my app may be ported between clusters as long as the storage provided supports my designated data path protocol.
 
-
+  
 
 ## System Configuration
 
