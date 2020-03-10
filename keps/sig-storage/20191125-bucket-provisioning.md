@@ -47,7 +47,7 @@ status: provisional
 
 # Summary
 
-This proposal introduces the Container Object Storage Interface (COSI), whose purpose is to provide a familiar and standardized method of provisioning object storage buckets in an manner agnostic to the storage vendor. The COSI environment is comprised of Kubernetes CRDs, operators to manage these CRDs, and a gRPC interface by which these operators communicate with vendor drivers.  This design is of course heavily inspired by the Kubernetes’ implementation of the Container Storage Interface (CSI).  However, bucket management lacks some of the notable requirements of block and file provisioning and allows for an architecture with lower overall complexity.  This proposal does not include a standardized protocol or abstraction of storage vendor APIs.  
+This proposal introduces the Container Object Storage Interface (COSI), whose purpose is to provide a familiar and standardized method of provisioning object storage buckets in an manner agnostic to the storage vendor. The COSI environment is comprised of Kubernetes CRDs, operators to manage these CRDs, and a gRPC interface by which these operators communicate with vendor drivers.  This design is heavily inspired by the Kubernetes’ implementation of the Container Storage Interface (CSI).  However, bucket management lacks some of the notable requirements of block and file provisioning and allows for an architecture with lower overall complexity.  This proposal does not include a standardized protocol or abstraction of storage vendor APIs.  
 
 ## Motivation 
 
@@ -66,19 +66,17 @@ File and block are first class citizens within the Kubernetes ecosystem.  Object
 + Define a native _data-plane_ object store API which would greatly improve object store app portability.
 
 ## Vocabulary
-+  _Brownfield_ - also called "dynamic brownfield" - buckets are created outside the COSI system but granted access via COSI. The OB, driver secret, app secret and binding are all performed by COSI.
-+ _Bucket_ - A namespace where objects reside, similar to a flat POSIX directory.
-+ _BucketClass_ (BC) - A cluster-wide (non-namespaced) custom resource containing fields defining the provisioner and an immutable parameter set.  Referenced by ObjectBucketClaims and populated into the OB.  Only used for provisioning new buckets.
++  _Brownfield Bucket_ - externally created, manually integrated and managed by a provisioner
++ _Bucket_ - A user-namespaced custom resource representing an object store bucket.
++ _BucketClass (BC)_ - A cluster-wide (non-namespaced) custom resource containing fields defining the provisioner and an immutable parameter set.  Referenced by ObjectBucketClaims and populated into the OB.  Only used for provisioning new buckets.
++ _BucketContent (BT)_ - A cluster-scoped custom resource bound to a Bucket and containing relevant metadata. 
 + _Container Object Storage Interface (COSI)_ -  The specification of gRPC data and methods making up the communication protocol between the driver and the sidecar.
 + _COSI Controller_ - A single, central controller which manages OBCs, OBs, and Secrets cluster-wide. Often referred to below as the "central controller".
-+ _"cosi-system"_ - The namespace name for all COSI drivers and sidecars. Even if a cluster supports different, concurrent object stores, all drivers live in this namespace.
-+ _Driver - A containerized gRPC server which implements a storage vendor’s business logic through the COSI interface. It can be written in any language supported by gRPC and is independent of Kubernetes. There is historical precedence in Kubernetes to call this type of container a _plugin_, but going forward _driver_ is the preferred name.
-+ _Greenfield_ - new buckets dynamically created by the driver.
-+ _OB_ (Object Bucket) - A cluster-wide (non-namespaced) custom resource representing the provisioned bucket and relevant metadata.
-+ _OBC_ (Object Bucket Claim) - A user-namespaced custom resource representing a user’s bucket request. 
-+ _Object_ - An atomic, immutable unit of data stored in buckets.
-+ _Sidecar_ - A controller deployed in the same pod as the driver, responsible for managing OBs and communicating with the Driver via gRPC. Needs write access to its OB. Note: the sidecar controller can use [predicates](https://godoc.org/sigs.k8s.io/controller-runtime/pkg/predicate) to filter OBs by driver name (assuming a unique label is added to OBs).
-+ _Static_ - also called "static brownfield" - buckets are created outside the COSI system but granted access via COSI without the need for the driver/sidecar. The OB and driver secret are created manually in the expected locations. The app secret and binding are performed by COSI.
++ _Driver_ - A containerized gRPC server which implements a storage vendor’s business logic through the COSI interface. It can be written in any language supported by gRPC and is independent of Kubernetes.
++ _Greenfield Bucket_ - created and managed by the COSI system.
++  _Object_ - An atomic, immutable unit of data stored in buckets.
++ _Sidecar_ - A controller deployed in the same pod as the driver, responsible for managing OBs and communicating with the Driver via gRPC.
++ _Static Bucket_ - externally created, manually integrated but **lacking** a provisioner
 
 # Proposal
 
@@ -99,14 +97,8 @@ File and block are first class citizens within the Kubernetes ecosystem.  Object
 
 ## System Configuration
 
-+ The central controller runs in a protected namespace with RBAC privileges for managing OBCs, OBs, and Secrets cluster wide.
-    + Responsible for the binding relationship of OBs and OBCs.
-+ The "cosi-system" namespace must be created.
-    + This namespace must be granted write access to cluster-wide scoped OBs.
-+ The Driver and Sidecar containers run together in a single Pod in the "cosi-system" namespace.
-    + The gRPC connection is made through the Pod’s localhost.
-+ BucketClasses must exist (cluster-wide scope).
-+ No node affinity or other requirements exist.
++ The central controller runs in the `cosi-system` namespace with where it manages Buckets, BucketContents, and Secrets cluster-wide.
++ The Driver and Sidecar containers run together in a Pod and are deployed in the `cosi-system` namespace, communicating via the Pod's internal network
 + Operations must be idempotent in order to handle failure recovery.
   
 ## Workflows
@@ -138,7 +130,7 @@ Reminder: BucketClass is ignored since it is used only for dynamic provisioning.
 1. The central controller clones the secret from the driver's namespace to the app's namespace.
 1. The central controller binds the OBC to the OB and the app is ready to run.
 
-### Grant Bucket Access for Dynamic Brownfield
+### Grant Bucket Access for Brownfield
 Reminder: BucketClass is ignored since it is used only for dynamic provisioning.
 
 1. An OB is manually created with enough information to identify an existing bucket in the object store.
@@ -165,7 +157,7 @@ Reminder: BucketClass is ignored in browfield operations.
 
 ##  Custom Resource Definitions
 
-#### ObjectBucketClaim (OBC)
+#### Bucket
 
 A user facing API object representing a request for a bucket, or access to an existing bucket. OBCs are created by users in their namespaces. Once the request is fulfilled, the OBC is “bound” to an Object Bucket (OB). The binding is used to mark the request as fulfilled and prevent further binds to the OB.
 
@@ -186,7 +178,6 @@ spec:
   bucketClassName: [6]
   objectBucketName: [7]
   secretName: [8]
-  driverSecretName: [9]
 status:
   phase:
   conditions: []ObjectBucketClaimCondition
@@ -201,15 +192,12 @@ status:
    - Injected by the central controller during greenfield ops.
    - Defined by the OBC author for static and dynamic brownfield ops.
 1. `secretName`: Desired name of the app's secret for greenfield. Fails if secret exists. Defined here so that app deployment (where the secret name is required) is independent of OBC creation.
-1. `driverSecretName`: Name of the driver's secret with the namespace assumed to be "cosi-system".
-   - Injected by the central controller during greenfield and dynamic brownfield ops.
-   - Defined by the OBC author for static brownfield ops.
 
 \* Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
 
 ** Ignored for brownfield usage.
 
-#### ObjectBucket (OB)
+#### BucketContent
 A cluster-wide scoped resource representing the bucket. The OB is expected to store stateful data relevant to bucket deprovisioning. The OB is bound to the OBC in a 1-1 mapping.
 
 ```yaml
@@ -265,13 +253,13 @@ kind: BucketClass
 metadata:
   name: 
   namespace: [1]
-driver: [2]  # should this be named "provisioner:" ??
+provisioner: [2]
 config: string:string [3]
 releasePolicy: {"Delete", "Retain"} [4]
 ```
 
 1. `namespace`: BucketClasses are co-namespaced with their associated driver
-1. `driver`: Name of the driver, provided via the GetDriverInfo() rpc. Used to filter OBs.
+1. `provisioner`: Name of the provisioner, provided via the GetDriverInfo() rpc. Used to filter OBs.
 1. `config`: object store specific key-value pairs passed to the driver.
 1.  `releasePolicy`: Prescribes outcome of an OBC/OB deletion.
     - `Delete`:  the bucket and its contents are destroyed
