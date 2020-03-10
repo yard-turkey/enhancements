@@ -34,14 +34,18 @@ status: provisional
       - [User](#user)
   - [System Configuration](#system-configuration)
   - [Workflows](#workflows)
-    - [Create Bucket](#create-bucket)
-    - [Delete Bucket](#delete-bucket)
-    - [Grant Bucket Access for Static Brownfield](#grant-bucket-access-for-static-brownfield)
-    - [Grant Bucket Access for Dynamic Brownfield](#grant-bucket-access-for-dynamic-brownfield)
-    - [Revoke Bucket Access (needs to handle stratic and dynamic brownfield!)](#revoke-bucket-access-needs-to-handle-stratic-and-dynamic-brownfield)
+    - [Greenfield Buckets](#greenfield-buckets)
+      - [Create Bucket](#create-bucket)
+      - [Delete Bucket](#delete-bucket)
+    - [Brownfield Buckets](#brownfield-buckets)
+      - [Grant Access](#grant-access)
+      - [Revoke Access](#revoke-access)
+    - [Static Buckets](#static-buckets)
+      - [Grant Access](#grant-access-1)
+      - [Revoke Access](#revoke-access-1)
   - [Custom Resource Definitions](#custom-resource-definitions)
-      - [ObjectBucketClaim (OBC)](#objectbucketclaim-obc)
-      - [ObjectBucket (OB)](#objectbucket-ob)
+      - [Bucket](#bucket)
+      - [BucketContent](#bucketcontent)
       - [BucketClass](#bucketclass)
 <!-- /toc -->
 
@@ -66,17 +70,19 @@ File and block are first class citizens within the Kubernetes ecosystem.  Object
 + Define a native _data-plane_ object store API which would greatly improve object store app portability.
 
 ## Vocabulary
-+  _Brownfield Bucket_ - externally created, manually integrated and managed by a provisioner
++  _Brownfield Bucket_ - externally created, represented by a BuckteClass and managed by a provisioner
 + _Bucket_ - A user-namespaced custom resource representing an object store bucket.
-+ _BucketClass (BC)_ - A cluster-wide (non-namespaced) custom resource containing fields defining the provisioner and an immutable parameter set.  Referenced by ObjectBucketClaims and populated into the OB.  Only used for provisioning new buckets.
-+ _BucketContent (BT)_ - A cluster-scoped custom resource bound to a Bucket and containing relevant metadata. 
-+ _Container Object Storage Interface (COSI)_ -  The specification of gRPC data and methods making up the communication protocol between the driver and the sidecar.
-+ _COSI Controller_ - A single, central controller which manages OBCs, OBs, and Secrets cluster-wide. Often referred to below as the "central controller".
++  _BucketClass_ - A cluster-scoped custom resource containing fields defining the provisioner and an immutable parameter set.
+   + _In Greenfield_: an abstraction of new bucket provisioning.
+   + _In Brownfield_: an abstration of an existing objet store bucket.
++ _BucketContent_ - A cluster-scoped custom resource, bound to a Bucket and containing relevant metadata. 
++ _Container Object Storage Interface (COSI)_ -  A specification of gRPC data and methods making up the communication protocol between the driver and the sidecar.
++ _COSI Controller_ - A central controller responsible for mananing Buckets, BucketContents, and Secrets cluster-wide.
 + _Driver_ - A containerized gRPC server which implements a storage vendor’s business logic through the COSI interface. It can be written in any language supported by gRPC and is independent of Kubernetes.
 + _Greenfield Bucket_ - created and managed by the COSI system.
 +  _Object_ - An atomic, immutable unit of data stored in buckets.
-+ _Sidecar_ - A controller deployed in the same pod as the driver, responsible for managing OBs and communicating with the Driver via gRPC.
-+ _Static Bucket_ - externally created, manually integrated but **lacking** a provisioner
++ _Sidecar_ - A BucketContent controller that communicates to the driver via a gRPC client.
++ _Static Bucket_ - externally created and manually integrated but **lacking** a provisioner
 
 # Proposal
 
@@ -97,63 +103,70 @@ File and block are first class citizens within the Kubernetes ecosystem.  Object
 
 ## System Configuration
 
-+ The central controller runs in the `cosi-system` namespace with where it manages Buckets, BucketContents, and Secrets cluster-wide.
-+ The Driver and Sidecar containers run together in a Pod and are deployed in the `cosi-system` namespace, communicating via the Pod's internal network
++ The COSI controller runs in the `cosi-system` namespace where it manages Buckets, BucketContents, and Secrets cluster-wide.
++ The Driver and Sidecar containers run together in a Pod and are deployed in the `cosi-system` namespace, communicating via the Pod's internal network.
 + Operations must be idempotent in order to handle failure recovery.
-  
 ## Workflows
 
-### Create Bucket
-1. The user creates an OBC in the app’s namespace.
-1. The COSI central controller detects the OBC and creates an OB (cluster-wide), containing driver-relevant data collected from the OBC and BC.
-1. The Sidecar detects the OB and issues a CreateBucket() rpc, passing to the driver config data.
-1. The Driver creates the bucket and returns pertinent endpoint, credential, and metadata.
-1. The Sidecar creates a secret in its namespace ("cosi-system") containing essential connection information.
-1. The central controller copies the secret to the OBC’s namespace and the app is ready to run.
+### Greenfield Buckets
 
-### Delete Bucket
-1. The user deletes the OBC, which blocks until the finalizer is removed.
-1. The central controller deletes the OB, which also blocks until its finalizer is removed.
-1. The Sidecar detects this and issues a DeleteBucket() rpc to the Driver.  It passes data stored in the OB.
-1. The Driver deletes the bucket and responds with no errors.
-1. The Sidecar deletes the OB’s secret.
-1. The central controller deletes the secret’s copy in the app’s namespace.
-1. The central controller removes the finalizers from the OBC, OB, and Secret allowing them to be deleted.
+#### Create Bucket
 
-### Grant Bucket Access for Static Brownfield
-Reminder: BucketClass is ignored since it is used only for dynamic provisioning.
+1. The user creates Bucket in the app’s namespace.
+1. The COSI Controller detects the Bucket and creates a BucketContent object containing driver-relevant data.
+1. The Sidecar detects the BucketContent and issues a CreateBucket() rpc with any parameters defined in the BucketClass.
+1. The driver provisions the bucket and returns pertinent endpoint, credential, and metadata information.
+1. The sidecar creates a Secret in its namespace (`cosi-system`) containing endpoint and credential information and an owener reference to the BucketContent.
+1. rThe COSI controller generates a Secret in the Bucket's namespace containing the data of it's parent Secret, with an owner reference to the Bucket.  
+1. The workflow ingests the Secret to begin operation.
 
-1. An OB is manually created with enough information to identify an existing bucket in the object store.
-1. A secret granting bucket-create privilege is manually created in the Driver’s namespace.
-1. The user creates an OBC in the app’s namespace which references the pre-existing OB and driver secret.
-1. The central controller detects the OBC and notices its `objectBucketRef` and `secretRef` are filled in.
-1. The central controller clones the secret from the driver's namespace to the app's namespace.
-1. The central controller binds the OBC to the OB and the app is ready to run.
+#### Delete Bucket
 
-### Grant Bucket Access for Brownfield
-Reminder: BucketClass is ignored since it is used only for dynamic provisioning.
+1. The user deletes thier Bucket, which blocks until backend deletion operations complete.
+1. The COSI controller detects the update and deletes the BucketContent, which also blocks until backend deletion operations complete.
+1. The sidecar detects this and issues a DeleteBucket() rpc to the Driver.  It passes pertitent data stored in the BucketContent.
+1. The driver deletes the bucket from the object store and responds with no error.
+1. The sidecar removes the BucketContent's finalizer.  The BucketContent and parent Secret are garbage collected.
+1. The COSI controller removes the finalizer on the Bucket.  The Bucket and the child Secret are garbage collected.
 
-1. An OB is manually created with enough information to identify an existing bucket in the object store.
-1. The user creates an OBC in the app’s namespace which references the pre-existing OB.
-1. The central controller detects the OBC and notices its `objectBucketRef` is filled in but its `secretRef` is empty.
-1. The central controller updates OB Phase and OBC reference.
-1. The Sidecar detects the OB update and calls the `Grant()` gRPC method.
-1. The Driver grants access to the bucket and returns pertinent endpoint, credential, and metadata.
-1. The Sidecar creates a secret in its namespace containing essential connection information.
-1. The central controller clones the secret to the OBC’s namespace, binds the OB, and the app is ready to run.
+### Brownfield Buckets
 
-### Revoke Bucket Access (needs to handle stratic and dynamic brownfield!)
+#### Grant Access
 
-Reminder: BucketClass is ignored in browfield operations.
+1. A BucketClass is defined specifically referencing an object store bucket.
+1. A user creates a Bucket in the app namespace, specifying the BucketClass.
+1. The COSI controller detects the Bucket and creates a BucketContent object in the `cosi-system` namespace.
+1. The sidecar detects the BucketContent object and calls the GrantAccess() rpc to the driver, returing a set of credentials for accessing the bucket.
+1. The sidecar writes the credentials and endpoint information to a Secret in the `cosi-system` namespace, with an owner reference to the BucketContent.
+1. The COSI controller generates a Secret in the Bucket's namespace containing the parent Secret's data, with an owner reference to the Bucket.
+1. The workflow ingests the Secret to begin operation.
 
-1. The user deletes the OBC, which blocks until the finalizer is removed.
-1. The central controller detects the OBC change and updates OB’s Phase.
-1. The Sidecar detects the OB update and calls the `Revoke()` gRPC method.
-1. The Driver revokes access to the bucket and responds with no errors.
-1. The Sidecar deletes the OB’s secret.
-1. The central controller deletes the secret’s copy in the app’s namespace.
-1. The central controller removes the finalizers from the OBC, OB, and Secret.
-1. The OBC and its secret are garbage collected and the OB remains.
+#### Revoke Access
+
+1. The user deletes the Bucket, which blocks until revoke operations complete.
+2. The COSI controller detects the update and deletes the BucketContent, which also blocks until backend revoke operations complete.
+3. The sidecar detects the BucketContent update and invokes the RevokeAccess() rpc method.
+4. The driver terminates the access for the associated credentials.
+5. The sidecar removes the finalizer from the BucketContent, allowing it and the parent Secret to be garbage collected.
+6. The COSI controller removes the finalizer from the Bucket,  allowing it and the child Secret to be garbage collected.
+
+### Static Buckets
+
+> Note: No driver is present to manage provisioning.  The COSI controller only automates Bucket/BucketContent binding operations.
+
+#### Grant Access
+
+1. A BucketClass is defined specifically referencing an object store bucket and a Secret in the `cosi-system` namespace containing access credentials.
+1. A user creates a Bucket in the app namespace, specifying the BucketClass.
+1. The COSI controller detects the object store bucket and Secret in the BucketClass and creates a BucketContent in the `cosi-system` namespace.
+1. The COSI controller generates a Secret in the Bucket's namespace containing the parent Secret's data, with an owner reference to the Bucket.
+1. The workflow ingests the Secret to begin operation.
+
+#### Revoke Access
+
+1. The user deletes the Bucket, which blocks until revoke operations complete.
+1. The COSI controller deletes the Bucket's bound BucketContent object.
+1. The COSI controller removes the finalizer from the Bucket, allowing it and the child Secret to be garbage collected.
 
 ##  Custom Resource Definitions
 
