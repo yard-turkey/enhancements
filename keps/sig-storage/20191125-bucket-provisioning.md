@@ -172,110 +172,104 @@ File and block are first class citizens within the Kubernetes ecosystem.  Object
 
 #### Bucket
 
-A user facing API object representing a request for a bucket, or access to an existing bucket. OBCs are created by users in their namespaces. Once the request is fulfilled, the OBC is “bound” to an Object Bucket (OB). The binding is used to mark the request as fulfilled and prevent further binds to the OB.
+A user facing API object representing an object store bucket. Created by a user in their app's namespace. Once provisiong is complete, the Bucket is "bound" to the corresponding BucketContent. The is used to prevent further binds to the BucketContent.
 
 
 ```yaml
 apiVersion: cosi.io/v1alpha1
-kind: ObjectBucketClaim
+kind: Bucket
 metadata:
-  name: [1]
+  name:
   namespace:
   labels:
-    “cosi.io/driver”: [2]
+    cosi.io/provisioner: [1]
+  finalizers:
+  - cosi.io/finalizer [2]
+spec:
+  bucketName: [3]
+  generateBucketName: [4]
+  bucketClassName: [5]
+  secretName: [6]
+status:
+  bucketContentName: [7]
+  phase:
+  conditions: 
+```
+1. `labels`: COSI controller adds the label to its managed resources to easy CLI GET ops.  Value is the driver name returned by GetDriverInfo() rpc*.
+1. `finalizers`: COSI controller adds the finalizer to defer Bucket deletion until backend deletion ops succeed.
+1. `bucketName`: Desired name of the bucket to be created**.
+1. `generateBucketName`: Desired prefix to a randomly generated bucket name. Mutually exclusive with `bucketName`**.
+1. `bucketClassName`: Name of the target BucketClass.
+1. `secretName`: Desired name of the app's secret for greenfield. Fails if secret exists. Enables users to get a deterministic Secret name.
+1. `bucketContentName`: Name of a bound BucketContent
+
+> \* Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
+
+> ** Ignored in Brownfield and Static operations
+
+#### BucketContent
+
+A cluster-scoped resource representing an object store bucket. The BucketContent is expected to store stateful data relevant to bucket deprovisioning. The BucketContent is bound to the Bucket in a 1:1 mapping.
+
+```yaml
+apiVersion: cosi.io/v1alpha1
+kind: BucketContent
+Metadata:
+  name: [1]
+  labels:
+    cosi.io/provisioner: [2]
   finalizers:
   - cosi.io/finalizer [3]
 spec:
-  bucketName: [4]
-  generateBucketName: [5]
-  bucketClassName: [6]
-  objectBucketName: [7]
-  secretName: [8]
-status:
-  phase:
-  conditions: []ObjectBucketClaimCondition
-```
-1. `name`: the metadata name of the OBC; however this name can be generated and thus cannot be relied on to predictably name other related resources, eg. secrets. 
-1. `labels`: central controller adds the label to its managed resources for easy GET ops.  Value is the driver name returned by GetDriverInfo() rpc*.
-1. `finalizers`: central controller adds the finalizer to defer OBC deletion until backend deletion ops succeed.
-1. `bucketName`: Desired name of the bucket to be created**.
-1. `generateBucketName`: Prefix to a randomly generated name. Mutually exclusive with `bucketName`**.
-1. `bucketClassName`: Name of the target BucketClass**.
-1. `objectBucketName`: Name of a bound OB.
-   - Injected by the central controller during greenfield ops.
-   - Defined by the OBC author for static and dynamic brownfield ops.
-1. `secretName`: Desired name of the app's secret for greenfield. Fails if secret exists. Defined here so that app deployment (where the secret name is required) is independent of OBC creation.
-
-\* Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
-
-** Ignored for brownfield usage.
-
-#### BucketContent
-A cluster-wide scoped resource representing the bucket. The OB is expected to store stateful data relevant to bucket deprovisioning. The OB is bound to the OBC in a 1-1 mapping.
-
-```yaml
-apiVersion: cosi.io/v1alpha1
-kind: ObjectBucket
-Metadata:
-  name: [1]
-  namespace: [2]
-  labels:
-    “cosi.io/driver”: [3]
-  finalizers:
-  - "cosi.io/finalizer" [4]
-spec:
-  bucketClassName: [5]
-  releasePolicy: {"Delete", "Retain"} [6]
-  bucketConfig: map[string]string [7]
-  objectBucketClaimRef: [8]
+  bucketClassName: [4]
+  releasePolicy: {"Delete", "Retain"} [5]
+  bucketConfig: map[string]string [6]
+  bucketRef: [7]
     name:
     namespace:
-  secretName: [9]
+  secretName: [8]
 status:
-  bucketMetaData: <map[string]string> [10]
-  phase: {"Bound", "Released", "Failed", “Errored”} [11]
-  conditions: []ObjectBucketCondition
+  bucketMetaData: <map[string]string> [9]
+  phase: {"Bound", "Released", "Failed", "Errored"} [10]
+  conditions:
 ```
-1. `name`: Generated in the pattern of “obc-”\<OBC-NAMESPACE>"-"\<OBC-NAME>
-1. `namespace`: The namespace of the Driver.
-1. `labels`: central controller adds the label to its managed resources for easy GET ops.  Value is the driver name returned by GetDriverInfo() rpc*.
-1. `finalizers`: Set and cleared by the COSI Controller and prevents accidental deletion of an OB.
-1. `bucketClassName`: Name of the bucket class
-1. `releasePolicy`: release policy from the Bucket Class referenced in the OBC. See `BucketClass` spec for values.
+1. `name`: Generated in the pattern of `“bucket-”<BUCKET-NAMESPACE>"-"<BUCKET-NAME>`
+1. `labels`: central controller adds the label to its managed resources for easy CLI GET ops.  Value is the driver name returned by GetDriverInfo() rpc*.
+1. `finalizers`: COSI controller adds the finalizer to defer Bucket deletion until backend deletion ops succeed.
+1. `bucketClassName`: Name of the associated BucketClass
+1. `releasePolicy`: the release policy defined in the associated BucketClass. (see [BucketClass](#BucketClass) for more information)
 1. `bucketConfig`: a string:string map of driver defined key-value pairs
-1. `objectBucketClaimRef`: the name & namespace of the bound OBC.
-1. `secretName`: the name of the sidecar-generated secret. Its namespace is assumed "cosi-system".
-1. `bucketMetaData`: stateful data relevant to the managing of the bucket but potentially inappropriate user knowledge (e.g. the user’s in-store user name)
-1. `phase`: is the current state of the ObjectBucket:
-    - `Bound`: the operator finished processing the request and linked the OBC and OB
-    - `Released`: the OBC has been deleted, leaving the OB unclaimed.
+1. `bucketRef`: the name & namespace of the bound Bucket.
+1. `secretName`: the name of the sidecar-generated secret. It's namespace is assumed `cosi-system`.
+1. `bucketMetaData`: stateful data relevant to the managing of the bucket but potentially inappropriate user knowledge (e.g. user's IAM role name)
+1. `phase`: is the current state of the BucketContent:
+    - `Bound`: the operator finished processing the request and bound the Bucket and BucketContent
+    - `Released`: the Bucket has been deleted, leaving the BucketContent unclaimed.
     - `Failed`: error and all retries have been exhausted.
     - `Retrying`: set when a recoverable driver or kubernetes error is encountered during bucket creation or access granting. Will be retried.
 
-
-\* Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
+> \* Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
 
 #### BucketClass
 
-A cluster-wide scoped custom resource.
-During greenfield workflows an OBC references a Bucket Class (BC).  The bucket class defines a release policy, and specifies driver specific parameters, such as region, bucket lifecycle policies, etc., as well as the name of the driver as returned by the `GetDriverInfo()` rpc.  The driver name is used to filter OBs meant to be handled by the given driver.
+A cluster-scoped custom resource. The bucket class defines a release policy, and specifies driver specific parameters, such as region, bucket lifecycle policies, etc., as well as the name of the driver.  The driver name is used to filter BuckeContenst meant to be handled by a given driver.  In static bucket workflows, the driver name may be empty if the object bucket is defined.
 
 ```yaml
 apiVersion: cosi.io/v1alpha1
 kind: BucketClass
 metadata:
   name: 
-  namespace: [1]
-provisioner: [2]
-config: string:string [3]
-releasePolicy: {"Delete", "Retain"} [4]
+provisioner: [1]
+config: string:string [2]
+releasePolicy: {"Delete", "Retain"} [3]
+targetBucket: [5]
+secretName: [6]
 ```
 
-1. `namespace`: BucketClasses are co-namespaced with their associated driver
-1. `provisioner`: Name of the provisioner, provided via the GetDriverInfo() rpc. Used to filter OBs.
+1. `provisioner`: Used by sidecars to filter BucketContent objects 
 1. `config`: object store specific key-value pairs passed to the driver.
-1.  `releasePolicy`: Prescribes outcome of an OBC/OB deletion.
+1.  `releasePolicy`: Prescribes outcome of a Deletion and Revoke events.
     - `Delete`:  the bucket and its contents are destroyed
     - `Retain`:  the bucket and its contents are preserved, only the user’s access privileges are terminated
-
-
+- `targetBucket`: A bucket connection endpoint of a brownfield or static bucket.  If provided, assumed to be a GrantAccess() operation.
+- `secretName`: Specifies a  Secret in `cosi-system` namespace containing access credentials required by the driver to operate
