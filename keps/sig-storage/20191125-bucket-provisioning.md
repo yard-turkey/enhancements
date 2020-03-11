@@ -116,8 +116,8 @@ File and block are first class citizens within the Kubernetes ecosystem.  Object
 1. The COSI Controller detects the Bucket and creates a BucketContent object containing driver-relevant data.
 1. The Sidecar detects the BucketContent and issues a CreateBucket() rpc with any parameters defined in the BucketClass.
 1. The driver provisions the bucket and returns pertinent endpoint, credential, and metadata information.
-1. The sidecar creates a Secret in its namespace (`cosi-system`) containing endpoint and credential information and an owener reference to the BucketContent.
-1. rThe COSI controller generates a Secret in the Bucket's namespace containing the data of it's parent Secret, with an owner reference to the Bucket.  
+1. The sidecar creates a Secret in it's namespace (`cosi-system`) containing endpoint and credential information and an owener reference to the BucketContent.
+1. The COSI controller generates a Secret in the Bucket's namespace containing the data of it's parent Secret, with an owner reference to the Bucket.  
 1. The workflow ingests the Secret to begin operation.
 
 #### Delete Bucket
