@@ -122,7 +122,7 @@ File and block are first class citizens within the Kubernetes ecosystem.  Object
 
 #### Delete Bucket
 
-1. The user deletes thier Bucket, which blocks until backend deletion operations complete.
+1. The user deletes their Bucket, which blocks until backend deletion operations complete.
 1. The COSI controller detects the update and deletes the BucketContent, which also blocks until backend deletion operations complete.
 1. The sidecar detects this and issues a DeleteBucket() rpc to the Driver.  It passes pertitent data stored in the BucketContent.
 1. The driver deletes the bucket from the object store and responds with no error.
