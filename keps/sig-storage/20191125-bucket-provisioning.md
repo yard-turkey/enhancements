@@ -68,8 +68,10 @@ File and block are first class citizens within the Kubernetes ecosystem.  Object
 
 ## Non-Goals
 + Define a native _data-plane_ object store API which would greatly improve object store app portability.
++ Mirror the static workflow of PersistentVolumes wherein users are given the first available Volume.  Pre-provisioned buckets are expected to be non-empty and thus unique.
 
-## Vocabulary
+##  Vocabulary
+
 +  _Brownfield Bucket_ - externally created, represented by a BuckteClass and managed by a provisioner
 + _Bucket_ - A user-namespaced custom resource representing an object store bucket.
 +  _BucketClass_ - A cluster-scoped custom resource containing fields defining the provisioner and an immutable parameter set.
@@ -190,8 +192,10 @@ spec:
   generateBucketName: [4]
   bucketClassName: [5]
   secretName: [6]
+  requestProtocol: [7]
+  requestAccessMode: {"ro", "rw"} [8]
 status:
-  bucketContentName: [7]
+  bucketContentName: [9]
   phase:
   conditions: 
 ```
@@ -200,7 +204,9 @@ status:
 1. `bucketName`: Desired name of the bucket to be created**.
 1. `generateBucketName`: Desired prefix to a randomly generated bucket name. Mutually exclusive with `bucketName`**.
 1. `bucketClassName`: Name of the target BucketClass.
-1. `secretName`: Desired name of the app's secret for greenfield. Fails if secret exists. Enables users to get a deterministic Secret name.
+1. `secretName`: Desired name for user's credential Secret. Fails on name collisions. Deterministic names allow for a single manifest workflow.
+1. `requestProtocol`: String array of protocols (e.g. s3, gcs, swift, etc.) requested by the user.  Used in matching Buckets to BucketClasses and ensuring compatibility with backing object stores.
+1. `requestAccessMode`:  The requested level of access provided to the returned access credentials.
 1. `bucketContentName`: Name of a bound BucketContent
 
 > \* Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
@@ -222,25 +228,29 @@ Metadata:
   - cosi.io/finalizer [3]
 spec:
   bucketClassName: [4]
-  releasePolicy: {"Delete", "Retain"} [5]
-  bucketConfig: map[string]string [6]
-  bucketRef: [7]
+  supportedProtocols: [5]
+  releasePolicy: {"Delete", "Retain"} [6]
+  bucketConfig: map[string]string [7]
+  bucketRef: [8]
     name:
     namespace:
-  secretName: [8]
+  secretRef: [9]
+  accessMode: {"rw", "ro"} [10]
 status:
-  bucketMetaData: <map[string]string> [9]
-  phase: {"Bound", "Released", "Failed", "Errored"} [10]
+  bucketAttributes: <map[string]string> [11]
+  phase: {"Bound", "Released", "Failed", "Errored"} [12]
   conditions:
 ```
 1. `name`: Generated in the pattern of `“bucket-”<BUCKET-NAMESPACE>"-"<BUCKET-NAME>`
 1. `labels`: central controller adds the label to its managed resources for easy CLI GET ops.  Value is the driver name returned by GetDriverInfo() rpc*.
 1. `finalizers`: COSI controller adds the finalizer to defer Bucket deletion until backend deletion ops succeed.
 1. `bucketClassName`: Name of the associated BucketClass
+1. `supportedProtocols`:  String array of protocols (e.g. s3, gcs, swift, etc.) supported by the associated object store.
 1. `releasePolicy`: the release policy defined in the associated BucketClass. (see [BucketClass](#BucketClass) for more information)
-1. `bucketConfig`: a string:string map of driver defined key-value pairs
+1. `bucketAttributes`: a string:string map of driver defined key-value pairs
 1. `bucketRef`: the name & namespace of the bound Bucket.
-1. `secretName`: the name of the sidecar-generated secret. It's namespace is assumed `cosi-system`.
+1. `secretRef`: the name of the sidecar-generated secret. It's namespace is assumed `cosi-system`.
+1. `accessMode`: The level of access granted to the credentials stored in `secretRef`, one of "read only" or "read/write".
 1. `bucketMetaData`: stateful data relevant to the managing of the bucket but potentially inappropriate user knowledge (e.g. user's IAM role name)
 1. `phase`: is the current state of the BucketContent:
     - `Bound`: the operator finished processing the request and bound the Bucket and BucketContent
@@ -252,7 +262,7 @@ status:
 
 #### BucketClass
 
-A cluster-scoped custom resource. The bucket class defines a release policy, and specifies driver specific parameters, such as region, bucket lifecycle policies, etc., as well as the name of the driver.  The driver name is used to filter BuckeContenst meant to be handled by a given driver.  In static bucket workflows, the driver name may be empty if the object bucket is defined.
+A cluster-scoped custom resource. The BucketClass defines a release policy, and specifies driver specific parameters, such as region, bucket lifecycle policies, etc., as well as the name of the driver.  The driver name is used to filter BuckeContenst meant to be handled by a given driver.  In static bucket workflows, the driver name may be empty if the object bucket is defined.
 
 ```yaml
 apiVersion: cosi.io/v1alpha1
@@ -260,16 +270,18 @@ kind: BucketClass
 metadata:
   name: 
 provisioner: [1]
-config: string:string [2]
-releasePolicy: {"Delete", "Retain"} [3]
-targetBucket: [5]
-secretName: [6]
+supportedProtocols: [2]
+accessMode: {"ro", "rw"} [3]
+releasePolicy: {"Delete", "Retain"} [4]
+bucketContentName: [5]
+parameters: string:string [6]
 ```
 
 1. `provisioner`: Used by sidecars to filter BucketContent objects 
-1. `config`: object store specific key-value pairs passed to the driver.
+1. `supportedProtocols`: A strings array of protocols the associated object store supports (e.g. swift, s3, gcs, etc.)
+1. `accessModes`: Declares the level of access given to credentials provisioned through this class.
 1.  `releasePolicy`: Prescribes outcome of a Deletion and Revoke events.
     - `Delete`:  the bucket and its contents are destroyed
     - `Retain`:  the bucket and its contents are preserved, only the user’s access privileges are terminated
-- `targetBucket`: A bucket connection endpoint of a brownfield or static bucket.  If provided, assumed to be a GrantAccess() operation.
-- `secretName`: Specifies a  Secret in `cosi-system` namespace containing access credentials required by the driver to operate
+- `bucketContentName`: (Optional). An admin defined BucketContent representing a Brownfield or Static bucket.  A non-nil value in this field prevents the BucketClass from being used for Greenfield.
+- `parameters`: object store specific key-value pairs passed to the driver.
