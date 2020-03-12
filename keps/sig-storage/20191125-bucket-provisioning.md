@@ -230,15 +230,14 @@ spec:
   bucketClassName: [4]
   supportedProtocols: [5]
   releasePolicy: {"Delete", "Retain"} [6]
-  bucketConfig: map[string]string [7]
-  bucketRef: [8]
+  bucketRef: [7]
     name:
     namespace:
-  secretRef: [9]
-  accessMode: {"rw", "ro"} [10]
+  secretRef: [8]
+  accessMode: {"rw", "ro"} [9]
 status:
-  bucketAttributes: <map[string]string> [11]
-  phase: {"Bound", "Released", "Failed", "Errored"} [12]
+  bucketAttributes: <map[string]string> [10]
+  phase: {"Bound", "Released", "Failed", "Errored"} [11]
   conditions:
 ```
 1. `name`: Generated in the pattern of `“bucket-”<BUCKET-NAMESPACE>"-"<BUCKET-NAME>`
@@ -247,11 +246,10 @@ status:
 1. `bucketClassName`: Name of the associated BucketClass
 1. `supportedProtocols`:  String array of protocols (e.g. s3, gcs, swift, etc.) supported by the associated object store.
 1. `releasePolicy`: the release policy defined in the associated BucketClass. (see [BucketClass](#BucketClass) for more information)
-1. `bucketAttributes`: a string:string map of driver defined key-value pairs
 1. `bucketRef`: the name & namespace of the bound Bucket.
 1. `secretRef`: the name of the sidecar-generated secret. It's namespace is assumed `cosi-system`.
 1. `accessMode`: The level of access granted to the credentials stored in `secretRef`, one of "read only" or "read/write".
-1. `bucketMetaData`: stateful data relevant to the managing of the bucket but potentially inappropriate user knowledge (e.g. user's IAM role name)
+1. `bucketAttributes`: stateful data relevant to the managing of the bucket but potentially inappropriate user knowledge (e.g. user's IAM role name)
 1. `phase`: is the current state of the BucketContent:
     - `Bound`: the operator finished processing the request and bound the Bucket and BucketContent
     - `Released`: the Bucket has been deleted, leaving the BucketContent unclaimed.
