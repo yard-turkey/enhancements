@@ -192,8 +192,8 @@ spec:
   generateBucketName: [4]
   bucketClassName: [5]
   secretName: [6]
-  requestProtocol: [7]
-  requestAccessMode: {"ro", "rw"} [8]
+  protocol: [7]
+	accessMode: {"ro", "rw"} [8]
 status:
   bucketContentName: [9]
   phase:
@@ -205,8 +205,8 @@ status:
 1. `generateBucketName`: Desired prefix to a randomly generated bucket name. Mutually exclusive with `bucketName`**.
 1. `bucketClassName`: Name of the target BucketClass.
 1. `secretName`: Desired name for user's credential Secret. Fails on name collisions. Deterministic names allow for a single manifest workflow.
-1. `requestProtocol`: String array of protocols (e.g. s3, gcs, swift, etc.) requested by the user.  Used in matching Buckets to BucketClasses and ensuring compatibility with backing object stores.
-1. `requestAccessMode`:  The requested level of access provided to the returned access credentials.
+1. `protocol`: String array of protocols (e.g. s3, gcs, swift, etc.) requested by the user.  Used in matching Buckets to BucketClasses and ensuring compatibility with backing object stores.
+1. `accessMode`:  The requested level of access provided to the returned access credentials.
 1. `bucketContentName`: Name of a bound BucketContent
 
 > \* Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
