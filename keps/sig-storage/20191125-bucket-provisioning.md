@@ -83,12 +83,12 @@ File and block are first class citizens within the Kubernetes ecosystem.  Object
 + _BucketContent_ - A cluster-scoped custom resource bound to a `Bucket` and containing relevant metadata.
 + _Container Object Storage Interface (COSI)_ -  A specification of gRPC data and methods making up the communication protocol between the driver and the sidecar.
 + _COSI Controller_ - A central controller responsible for managing `Buckets`, `BucketContents`, and Secrets.
-+ _COSIRegistration - A cluster-scoped custom resource which serves the purpose of registering a driver.
++ _COSIRegistration_ - A cluster-scoped custom resource which serves the purpose of registering a driver.
 + _Driver_ - A containerized gRPC server which implements a storage vendor’s business logic through the COSI interface. It can be written in any language supported by gRPC and is independent of Kubernetes.
 + _Greenfield Bucket_ - a new bucket created and managed by the COSI system.
 +  _Object_ - An atomic, immutable unit of data stored in buckets.
 + _Sidecar_ - A `BucketContent` controller that communicates to the driver via a gRPC client.
-+ _Static Bucket_ - externally created and manually integrated but **lacking** a provisioner
++ _Static Bucket_ - externally created and manually integrated but _lacking_ a provisioner.
 
 # Proposal
 
@@ -116,7 +116,7 @@ File and block are first class citizens within the Kubernetes ecosystem.  Object
 
 **Note:** CSI does _not_ ensure unique driver names. We want to provide a mechanism for this but it may prove too difficult or not worth the time for MVP.
 
-It is important that driver names are unique otherwise multiple sidecars would try to handle the same BucketContent events (since the sidecar matches on driver name).  To ensure unique driver names the sidecar creates the `COSIRegistration` object, which is cluster scoped, and its _metadata.name_ is the name of the driver.
+It is important that driver names are unique otherwise multiple sidecars would try to handle the same `BucketContent` events (since the sidecar matches on driver name).  To ensure unique driver names, the sidecar creates the `COSIRegistration` object, which is cluster scoped, and its _metadata.name_ is the name of the driver.
 
 Sidecar start up will follow these steps:
 
@@ -229,18 +229,15 @@ status:
   phase:
   conditions: 
 ```
-1. `labels`: COSI controller adds the label to its managed resources to easy CLI GET ops.  Value is the driver name returned by GetDriverInfo() rpc*.
+1. `labels`: COSI controller adds the label to its managed resources to easy CLI GET ops.  Value is the driver name returned by GetDriverInfo() rpc. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
 1. `finalizers`: COSI controller adds the finalizer to defer `Bucket` deletion until backend deletion ops succeed.
 1. `bucketPrefix`: prefix prepended to a randomly generated bucket name, eg. "YosemitePhotos-".
 1. `bucketClassName`: Name of the target `BucketClass`.
 1. `secretName`: Desired name for user's credential Secret. API validation for unique name. Controlover this name allows for a single manifest workflow. Of course, there is a window here where API validation passes but the secret creation fails due to an existing secret of the same name just created. The user's (app) secret will continue to be attempted to be created until a timeout.
 1. `protocol`: String array of protocols (e.g. s3, gcs, swift, etc.) requested by the user.  Used in matching Buckets to BucketClasses and ensuring compatibility with backing object stores.
 1. `accessMode`:  The requested level of access provided to the returned access credentials.
-1. `bucketContentName`: Name of a bound BucketContent
+1. `bucketContentName`: Name of a bound `BucketContent`.
 
-> \* Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
-
-> ** Ignored in Brownfield and Static operations
 
 #### BucketContent
 
@@ -272,7 +269,7 @@ status:
   conditions:
 ```
 1. `name`: Generated in the pattern of `“bucket-”<BUCKET-NAMESPACE>"-"<BUCKET-NAME>`. We may validate the length of the `Bucket` name and namespace to ensure that this metadata.name fits.
-1. `labels`: central controller adds the label to its managed resources for easy CLI GET ops.  Value is the driver name returned by GetDriverInfo() rpc*.
+1. `labels`: central controller adds the label to its managed resources for easy CLI GET ops.  Value is the driver name returned by GetDriverInfo() rpc. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
 1. `finalizers`: COSI controller adds the finalizer to defer Bucket deletion until backend deletion ops succeed.
 1. `bucketClassName`: Name of the associated BucketClass
 1. `supportedProtocols`:  String array of protocols (e.g. s3, gcs, swift, etc.) supported by the associated object store.
@@ -286,8 +283,6 @@ status:
     - `Released`: the Bucket has been deleted, leaving the BucketContent unclaimed.
     - `Failed`: error and all retries have been exhausted.
     - `Retrying`: set when a recoverable driver or kubernetes error is encountered during bucket creation or access granting. Will be retried.
-
-> \* Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
 
 #### BucketClass
 
