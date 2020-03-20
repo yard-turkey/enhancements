@@ -315,9 +315,9 @@ parameters: string:string [7]
     - `Retain`:  the bucket and its contents are preserved, only the user’s access privileges are terminated
     - `Reuse` : TBD
     - `Erase`: TBD
-- `bucketContentName`: (Optional). An admin defined `BucketContent` representing a brownfield or static bucket. A non-empty value in this field indicates brownfield provisioning. An empty value indicates greenfield provisioning.
-- `secretRef`: (Optional) The name and namespace of an existing secret to be copied to the `Bucket`'s namespace for static brownfield provisioning. If omitted then provisioning is either greenfield or dynamic brownfield, depending on `bucketContentName`.
-- `parameters`: object store specific key-value pairs passed to the driver.
+1. `bucketContentName`: (Optional). An admin defined `BucketContent` representing a brownfield or static bucket. A non-empty value in this field indicates brownfield provisioning. An empty value indicates greenfield provisioning.
+1. `secretRef`: (Optional) The name and namespace of an existing secret to be copied to the `Bucket`'s namespace for static brownfield provisioning. If omitted then provisioning is either greenfield or dynamic brownfield, depending on `bucketContentName`.
+1. `parameters`: object store specific key-value pairs passed to the driver.
 
 #### COSIRegistration
 
