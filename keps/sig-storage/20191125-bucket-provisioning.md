@@ -328,10 +328,8 @@ kind: COSIRegistration
 metadata:
   name: [1]
 driverNamespace: [2]
-flags: map[string]string [3]
 ```
 
 1. `name`: The name here must match the name of the driver, which means that driver names follow Kubernetes naming rules.
 1. `driverNamespace`: The name of the driver's namespace.
-1. `flags`: (Optional) string:string map. The flags passed to the driver.
 
