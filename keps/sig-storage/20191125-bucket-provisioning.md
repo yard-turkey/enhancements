@@ -131,12 +131,12 @@ Sidecar start up will follow these steps:
 
 
 
-### Distinguishing Bucket Case
+### Determining Case from BucketClass
 
 | BucketClassFields             | SecretRef: nil | SecretRef: non-nil |
 | ----------------------------- | -------------- | ------------------ |
-| **bucketIdentifier: non-nil** | Brownfield     | Undefined          |
-| **bucketIdentifier: nil**     | Greenfield     | Static             |
+| **bucketIdentifier: non-nil** | Brownfield     | Static             |
+| **bucketIdentifier: nil**     | Greenfield     | Undefined          |
 
 #### Create Bucket (Greenfield)
 
