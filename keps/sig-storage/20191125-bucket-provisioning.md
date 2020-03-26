@@ -257,10 +257,10 @@ Metadata:
   finalizers:
   - cosi.io/finalizer [3]
 spec:
-	provisioner: [4]
-	releasePolicy: [5]
-	accessModes: [6]
-	supportedProtocols: [7]
+  provisioner: [4]
+  releasePolicy: [5]
+  accessModes: [6]
+  supportedProtocols: [7]
   bucketClassName: [8]
   bucketRef: [9]
     name:
@@ -273,7 +273,7 @@ spec:
   bucketIdentifier: [11]
   parameters: 
 status:
-	message: [12]
+  message: [12]
   phase: [13]
   conditions:
 ```
