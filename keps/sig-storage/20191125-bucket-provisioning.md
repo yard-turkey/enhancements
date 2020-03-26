@@ -35,7 +35,7 @@ status: provisional
   - [System Configuration](#system-configuration)
     - [Unique Driver Names](#unique-driver-names)
   - [Workflows](#workflows)
-    - [Distinguishing Bucket Case](#distinguishing-bucket-case)
+    - [Determining Case from BucketClass](#determining-case-from-bucketclass)
       - [Create Bucket (Greenfield)](#create-bucket-greenfield)
       - [Grant Bucket Access (Brownfield)](#grant-bucket-access-brownfield)
       - [Delete Or Revoke Access (Greenfield &amp; Brownfield)](#delete-or-revoke-access-greenfield--brownfield)
@@ -46,7 +46,6 @@ status: provisional
       - [Bucket](#bucket)
       - [BucketContent](#bucketcontent)
       - [BucketClass](#bucketclass)
-      - [COSIRegistration](#cosiregistration)
 <!-- /toc -->
 
 # Summary
