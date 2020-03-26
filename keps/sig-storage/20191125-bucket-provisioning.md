@@ -80,7 +80,6 @@ File and block are first class citizens within the Kubernetes ecosystem.  Object
 + _BucketContent_ - A cluster-scoped custom resource bound to a `Bucket` and containing relevant metadata.
 + _Container Object Storage Interface (COSI)_ -  A specification of gRPC data and methods making up the communication protocol between the driver and the sidecar.
 + _COSI Controller_ - A central controller responsible for managing `Buckets`, `BucketContents`, and Secrets.
-+ _COSIRegistration_ - A cluster-scoped custom resource which serves the purpose of registering a driver.
 + _Driver_ - A containerized gRPC server which implements a storage vendor’s business logic through the COSI interface. It can be written in any language supported by gRPC and is independent of Kubernetes.
 + _Greenfield Bucket_ - a new bucket created and managed by the COSI system.
 +  _Object_ - An atomic, immutable unit of data stored in buckets.
