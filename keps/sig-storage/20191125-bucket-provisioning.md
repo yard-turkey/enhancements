@@ -212,7 +212,6 @@ metadata:
 spec:
   bucketPrefix: [3]
   bucketClassName: [4]
-  bucketIdentifier: [5]
   secretName: [6]
 status:
   bucketContentName: [7]
@@ -223,7 +222,6 @@ status:
 1. `finalizers`: COSI controller adds the finalizer to defer `Bucket` deletion until backend deletion ops succeed.
 1. `bucketPrefix`: (Optional) prefix prepended to a randomly generated bucket name, eg. "YosemitePhotos-". If empty no prefix is appended.
 1. `bucketClassName`: Name of the target `BucketClass`.
-1. `bucketIdentifier`: unique, identifiying information defined by the driver as an arbitrary string.  E.g. a bucket name, url, or serialized json object.  Base64 encoded to protect against syntax issues.
 1. `secretName`: Desired name for user's credential Secret. Defining this name allows for a single manifest workflow.  In cases of name collisions, attempting to create the user's secret will continue until a timeout occurs.
 1. `bucketContentName`: Name of a bound `BucketContent`.
 1. `phase`: 
@@ -317,7 +315,7 @@ parameters: string:string [7]
 1.  `releasePolicy`: Prescribes outcome of a Delete events. **Note:** In Brownfield and Static cases, *Retain* is mandated.
     - _Delete_:  the bucket and its contents are destroyed
     - _Retain_:  the bucket and its data are preserved with only abstracting Kubernetes being destroyed
-- `bucketIdentifier`: (Optional) Signals Brownfield use.  Defines the name of an existing bucket in an object store.
+- ​	`bucketIdentifier`: (Optional) Signals Brownfield use.  Defines the name of an existing bucket in an object store.
 1. `secretRef`: (Optional) Requires that `bucketIdentifier` be defined. The name and namespace of an existing secret to be copied to the `Bucket`'s namespace for static provisioning.
 1. `parameters`: (Optional) Object store specific key-value pairs passed to the driver.
 
