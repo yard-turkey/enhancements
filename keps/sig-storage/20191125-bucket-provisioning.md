@@ -304,23 +304,22 @@ provisioner: [1]
 supportedProtocols: [2]
 accessMode: {"ro", "wo", "rw"} [3]
 releasePolicy: {"Delete", "Retain"} [4]
-bucketIdentifier: [5]
-secretRef: [6]
+bucketNameActual: [5]
+bucketIdentifier: [6]
+secretRef: [7]
   name:
   namespace:
-parameters: string:string [7]
+parameters: string:string [8]
 ```
 
 1. `provisioner`: The name of the driver. If supplied the driver container and sidecar container are expected to be deployed. If omitted the `secretRef` is required for static provisioning.
-
 1. `supportedProtocols`: An array of protocols the associated object store supports (e.g. swift, s3, gcs, etc.). *Only* serves a descriptive purpose and is not verified.
-
 1. `accessMode`: (Optional) Declares the level of access given to credentials provisioned through this class.     If empty, defaults to `rw`.
-
 1. `releasePolicy`: Prescribes outcome of a Delete events. **Note:** In Brownfield and Static cases, *Retain* is mandated. 
     - `Delete`:  the bucket and its contents are destroyed
     - `Retain`:  the bucket and its data are preserved with only abstracting Kubernetes being destroyed
-1. `bucketIdentifier`: (Optional) Defines the name of an existing bucket in an object store.
-1. `secretRef`: (Optional) The name and namespace of an existing secret to be copied to the `Bucket`'s namespace for static provisioning.  Requires that `bucketIdentifier` be defined.
+1. `bucketNameActual`: (Optional) Names the object store bucket for brownfield and static cases.
+1. `bucketIdentifier`: (Optional) Contains driver defined information for locating the object store bucket; used for brownfield and static cases.
+1. `secretRef`: (Optional) The name and namespace of an existing secret to be copied to the `Bucket`'s namespace for static provisioning.  Requires that `bucketIdentifier` be defined. Used for brownfield and static cases.
 1. `parameters`: (Optional) Object store specific key-value pairs passed to the driver.
 
