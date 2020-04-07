@@ -267,9 +267,9 @@ spec:
   gcsIdentity: [13]
     accessKeyId:
     bucketName:
-		privateKeyName:
-		projectId:
-		serviceAccount:
+    privateKeyName:
+    projectId:
+    serviceAccount:
   parameters: [14]
 status:
   message: [15]
