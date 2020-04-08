@@ -266,7 +266,6 @@ spec:
     signatureVersion:
     userName:
   gcsIdentity: [13]
-    accessKeyId:
     bucketName:
     privateKeyName:
     projectId:
