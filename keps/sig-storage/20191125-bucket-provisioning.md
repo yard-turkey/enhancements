@@ -263,6 +263,7 @@ spec:
     accessKeyId:
     bucketName:
     region:
+    signatureVersion:
     userName:
   gcsIdentity: [13]
     accessKeyId:
