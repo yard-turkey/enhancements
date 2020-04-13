@@ -210,16 +210,18 @@ metadata:
   finalizers:
   - cosi.io/finalizer [2]
 spec:
-  bucketPrefix: [3]
-  bucketClassName: [4]
-  secretName: [5]
+  requestProtocol: [3]
+  bucketPrefix: [4]
+  bucketClassName: [5]
+  secretName: [6]
 status:
-  bucketContentName: [6]
-  phase: [7]
+  bucketContentName: [7]
+  phase: [8]
   conditions: 
 ```
 1. `labels`: COSI controller adds the label to its managed resources to easy CLI GET ops.  Value is the driver name returned by GetDriverInfo() rpc. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
 1. `finalizers`: COSI controller adds the finalizer to defer `Bucket` deletion until backend deletion ops succeed.
+1. `requestProtocol`: specifies the desired data format in which credentials are provided to the app.  One of {“s3”, “gcs”, or “azureBlob”}. 
 1. `bucketPrefix`: (Optional) prefix prepended to a randomly generated bucket name, eg. "YosemitePhotos-". If empty no prefix is appended.
 1. `bucketClassName`: Name of the target `BucketClass`.
 1. `secretName`: Desired name for user's credential Secret. Defining this name allows for a single manifest workflow.  In cases of name collisions, attempting to create the user's secret will continue until a timeout occurs.
@@ -245,35 +247,35 @@ spec:
   provisioner: [4]
   releasePolicy: [5]
   accessMode: [6]
-  protocol: [7]
-  bucketClassName: [8]
-  bucketRef: [9]
+  bucketClassName: [7]
+  bucketRef: [8]
     name:
     namespace:
     uuid:
     resourceVersion:
-  secretRef: [10]
+  secretRef: [9]
     name:
     namespace:
-  azureBlobIdentity: [11]
+  azureBlobIdentity: [10] // TODO break into auth and conn
     storageAccountName:
     accountKey:
     containerName:
-  s3Identity: [12]
+  s3Identity: [11]
+    endpoint:
     accessKeyId:
     bucketName:
     region:
     signatureVersion:
     userName:
-  gcsIdentity: [13]
+  gcsIdentity: [12]
     bucketName:
     privateKeyName:
     projectId:
     serviceAccount:
-  parameters: [14]
+  parameters: [13]
 status:
-  message: [15]
-  phase: [16]
+  message: [14]
+  phase: [15]
   conditions:
 ```
 1. `name`: Generated in the pattern of `<BUCKET-CLASS-NAME>'-'<RANDOM-SUFFIX>`. 
@@ -284,7 +286,6 @@ status:
     - _Delete_:  the bucket and its contents are destroyed
     - _Retain_:  the bucket and its data are preserved with only abstracting Kubernetes being destroyed
 1. `accessMode`: Declares the level of access given to credentials provisioned through this class.     If empty, drivers may set defaults.
-1. `protocol`:  protocol the associated object store supports (e.g. swift, s3, gcs, etc.). *Only* serves a descriptive purpose and is not verified.
 1. `bucketClassName`: Name of the associated `BucketClass`.
 1. `bucketRef`: the name & namespace of the associated `Bucket`.
    
@@ -316,11 +317,11 @@ kind: BucketClass
 metadata:
   name: 
 provisioner: [1]
-protocol: [2]
+supportedProtocols: [2]
 accessMode: {"ro", "wo", "rw"} [3]
 releasePolicy: {"Delete", "Retain"} [4]
-bucketNameActual: [5]
-bucketIdentifier: [6]
+bucketNameActual: [5] // TODO
+bucketIdentifier: [6] // TODO
 secretRef: [7]
   name:
   namespace:
@@ -328,7 +329,7 @@ parameters: string:string [8]
 ```
 
 1. `provisioner`: The name of the driver. If supplied the driver container and sidecar container are expected to be deployed. If omitted the `secretRef` is required for static provisioning.
-1. `protocol`: protocol the associated object store supports (e.g. swift, s3, gcs, etc.). *Only* serves a descriptive purpose and is not verified.
+1. `protocol`: protocols the associated object store supports (e.g. swift, s3, gcs, etc.).  Used in Bucket to BucketClass matching ops.
 1. `accessMode`: (Optional) Declares the level of access given to credentials provisioned through this class.     If empty, defaults to `rw`.
 1. `releasePolicy`: Prescribes outcome of a Delete events. **Note:** In Brownfield and Static cases, *Retain* is mandated. 
     - `Delete`:  the bucket and its contents are destroyed
@@ -337,4 +338,171 @@ parameters: string:string [8]
 1. `bucketIdentifier`: (Optional) Contains driver defined information for locating the object store bucket; used for brownfield and static cases.
 1. `secretRef`: (Optional) The name and namespace of an existing secret to be copied to the `Bucket`'s namespace for static provisioning.  Requires that `bucketIdentifier` be defined. Used for brownfield and static cases.
 1. `parameters`: (Optional) Object store specific key-value pairs passed to the driver.
+
+### RPC
+
+```
+syntax = "proto3";
+
+package cosi.v1;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "github.com/container-object-store-interface/go-cosi";
+
+extend google.protobuf.MessageOptions {
+    bool cosi_secret = 1000;
+}
+
+message DriverInfoRequest {} // INTENTIONALLY BLANK
+
+enum DataProtocol {
+    PROTOCOL_UNSPECIFIED = 0;
+    AZURE = 1;
+    GCS = 2;
+    S3 = 3;
+}
+
+enum AccessMode {
+    MODE_UNSPECIFIED = 0;
+    RO = 1;
+    WO = 2;
+    RW = 3;
+}
+
+message DriverInfoResponse {
+    // DriverName
+    string DriverName = 1;
+
+    // SupportedProtocols
+    repeated DataProtocol SupportedProtocols = 2;
+
+    // NextId = 3;
+}
+
+message CreateBucketRequest {
+    // BucketPrefix
+    string RequestBucketPrefix = 1;
+
+    // RequestProtocol
+    DataProtocol RequestProtocol = 2;
+
+    // DriverParameters
+    map<string, string> DriverParameters = 3;
+
+    AccessMode AccessMode = 4;
+
+    // NextId = 5;
+}
+
+message AzureResponse {
+    message ConnectionData {
+        // ContainerName
+        string ContainerName = 1;
+    }
+    ConnectionData Connection = 1;
+
+    message AuthenticationData {
+        option (cosi_secret) = true;
+
+        // StorageAccountName
+        string StorageAccountName = 1;
+
+        // AccessKey
+        string AccessKey = 2;
+    }
+    AuthenticationData Authentication = 2;
+}
+
+message GcsResponse {
+    message ConnectionData {
+        // BucketName
+        string BucketName = 1;
+
+        // ProjectId
+        string ProjectId = 2;
+    }
+    ConnectionData Connection = 1;
+
+    message AuthenticationData {
+        option (cosi_secret) = true;
+        // ServiceAccountName
+        string ServiceAccountName = 1;
+
+        // PrivateKeyName
+        string PrivateKeyName = 2;
+
+        // PrivateKey
+        string PrivateKey = 3;
+    }
+    AuthenticationData Authentication = 2;
+}
+
+message S3Response {
+    // Connection
+    message ConnectionData {
+        string BucketName = 1;
+        string Region = 2;
+        string Endpoint = 3;
+    }
+    ConnectionData Connection = 1;
+
+    // Authentication
+    message AuthenticationData {
+        option (cosi_secret) = true;
+
+        string AccessKeyId = 1;
+        string SecretKey = 2;
+        string SecurityToken = 3;
+        string UserName = 4;
+        enum Version {
+            VER_UNSPECIFIED = 0;
+            V2 = 1;
+            V4 = 2;
+        }
+        Version SignatureVersion = 5;
+
+        // NextId = 6;
+    }
+    AuthenticationData Authentication = 2;
+
+    // NextId = 3;
+}
+
+message CreateBucketResponse {
+    // BucketName
+    string BucketName = 1;
+
+    // ProtocolResponse
+    oneof ProtocolResponse {
+        AzureResponse Azure = 2;
+        GcsResponse Gcs = 3;
+        S3Response S3 = 4;
+    }
+
+    //NextId = 5
+}
+
+message DeleteBucketRequest {}
+
+message DeleteBucketResponse {}
+
+message GrantBucketAccessRequest {}
+
+message GrantBucketAccessResponse {}
+
+message RevokeBucketAccessRequest {}
+
+message RevokeBucketAccessResponse {}
+
+service DynamicBucketHandler {
+    rpc CreateBucket(CreateBucketRequest) returns (CreateBucketResponse) {}
+    rpc DeleteBucket(DeleteBucketRequest) returns (DeleteBucketResponse) {}
+}
+
+service StaticBucketHandler {
+    rpc GrantBucketAccess(GrantBucketAccessRequest) returns (GrantBucketAccessResponse) {}
+    rpc RevokeBucketAccess(RevokeBucketAccessRequest) returns (RevokeBucketAccessResponse) {}
+}
+```
 
