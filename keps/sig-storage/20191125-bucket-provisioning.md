@@ -341,7 +341,7 @@ isDefaultBucketClass: [8]
 1. `bucketContentRef:` (Optional) When specified, indicates a single `BucketConetent` for brownfield or static operations.
 1. `secretRef`: (Optional) The name and namespace of an existing secret to be copied to the `Bucket`'s namespace for static provisioning.  Requires that `bucketContentRef` point to an existing `BucketContent` . Used for brownfield and static cases.
 1. `parameters`: (Optional) Object store specific string:string map passed to the driver.
-1. `isDefaultBucketClass`: boolean. When true, signals that the COSI controller should attempt to match `Bucket`’s without a defined `BucketClass` to this class, accounting for the `Bucket`’s requested protocol.
+1. `isDefaultBucketClass`: boolean. When true, signals that the COSI controller should attempt to match `Bucket`’s without a defined `BucketClass` to this class, accounting for the `Bucket`’s requested protocol.  Multiple default classes for the same protocol will produce undefined behaviour, likely matching the first default class that is found.
 
 ### RPC
 
