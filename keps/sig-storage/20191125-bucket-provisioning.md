@@ -118,10 +118,10 @@ It is important that driver names are unique, otherwise multiple sidecars would 
 
 ### Determining Case from BucketClass
 
-| BucketClassFields      | SecretRef: non-nil | SecretRef: nil |
-| ---------------------- | ------------------ | -------------- |
-| **BucketRef: non-nil** | Static             | Brownfield     |
-| **BucketRef: nil**     | Undefined          | Greenfield     |
+| BucketClassFields             | SecretRef: non-nil | SecretRef: nil |
+| ----------------------------- | ------------------ | -------------- |
+| **BucketContentRef: non-nil** | Static             | Brownfield     |
+| **BucketContentRef: nil**     | Undefined          | Greenfield     |
 
 #### Create Bucket (Greenfield)
 
