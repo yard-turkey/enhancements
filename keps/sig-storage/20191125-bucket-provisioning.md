@@ -64,6 +64,7 @@ File and block are first class citizens within the Kubernetes ecosystem.  Object
 + Define a native _data-plane_ object store API which would greatly improve object store app portability.
 + Mirror the static workflow of PersistentVolumes wherein users are given the first available Volume.  Pre-provisioned buckets are expected to be non-empty and thus unique.
 + Strictly define automation around the COSI API.
++ Abstract and/or automate IAM operations such that user or credential creation be obscured behind the COSI API.
 
 ##  Vocabulary
 
@@ -93,15 +94,25 @@ File and block are first class citizens within the Kubernetes ecosystem.  Object
 
 ## API Relationships
 
-The diagram below indicates the relationships, by reference, between the proposed APIs, the user facing Kubernetes primitives, and the actual storage and identity instances.  COSI APIs (light green) bridge the gap between workloads and object stores, providing a standardized means of consuming object storage for Kubernetes operators and workloads.
+The diagram below indicates the relationships, by reference, between the proposed APIs, the user facing Kubernetes primitives, and the actual storage and identity instances.  COSI APIs bridge the gap between workloads and object stores, providing a standardized means of consuming object storage for Kubernetes operators and workloads.
 
-### Greenfield Bucket
+Secrets are used to store the cluster user’s authn/authz information, to be passed to automation so that operations can be performed on the user’s behalf.
+
+- Green objects represent COSI APIs.
+
+- Yellow objects represent user defined Kubernetes primitives
+- Red objects represent object store service instances
+- Grey objects represent possible connectors between the Bucket API and workloads.  The exact relation will be defined during design of the COSI automation.
+
+### Greenfield: Dynamic Bucket Creation
 
 In an automated system where bucket lifecycles are managed by a COSI controller, a user will define a [Bucket](#bucket), containing a reference a [Bucket Class](#BucketClass).  Bucket Classes are admin-created objects representing a preset configuration for bucket creation.  A [Bucket Content](#BucketContent) object is generated and encapsulates all configuration information from the BucketClass and Bucket.  The BucketContent will store all necessary information about the provisioned storage instance, including connection data.
 
+> Note: The ConfigMap is shown to illustrate one means of transmitting data to the Pod.  In this case, it would be an artifact of a controller.
+
 ![](./bucket-greenfield-api-relations.png)
 
-### Brownfield Bucket
+### Brownfield: Dynamic Bucket Access
 
 The expected workflow for interacting with a pre-existing storage instance is similar to Greenfield. The key distinction in this scenario is that a Bucket Class will reference a single, pre-existing bucket directly (indicated by the bold dashed line).  Buckets instantiated by users with reference to this class will be given the connection information for this pre-existing storage instance.  As part of this operation, the identity specified in the Bucket’s Secret should be granted permission to access the storage instance.  This operation should be configurable in through the BucketClass.
 
