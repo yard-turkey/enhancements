@@ -14,7 +14,7 @@ approvers:
   - TBD
 editor: TBD
 creation-date: 2019-11-25
-last-updated: 2020-02-27
+last-updated: 2020-04-28
 status: provisional
 ---
 
@@ -32,16 +32,7 @@ status: provisional
   - [User Stories](#user-stories)
       - [Admin](#admin)
       - [User](#user)
-  - [System Configuration](#system-configuration)
-    - [Unique Driver Names](#unique-driver-names)
-  - [Workflows](#workflows)
-    - [Determining Case from BucketClass](#determining-case-from-bucketclass)
-      - [Create Bucket (Greenfield)](#create-bucket-greenfield)
-      - [Grant Bucket Access (Brownfield)](#grant-bucket-access-brownfield)
-      - [Delete Or Revoke Access (Greenfield &amp; Brownfield)](#delete-or-revoke-access-greenfield--brownfield)
-    - [Static Buckets](#static-buckets)
-      - [Grant Access](#grant-access)
-      - [Revoke Access](#revoke-access)
+  - [API Relationships](#api-relationships)
   - [Custom Resource Definitions](#custom-resource-definitions)
       - [Bucket](#bucket)
       - [BucketContent](#bucketcontent)
@@ -50,26 +41,27 @@ status: provisional
 
 # Summary
 
-This proposal introduces the Container Object Storage Interface (COSI), whose purpose is to provide a familiar and standardized method of provisioning object storage buckets in a manner agnostic to the storage vendor. The COSI environment is comprised of Kubernetes CRDs, operators to manage these CRDs, and a gRPC interface by which these operators communicate with vendor drivers.  This design is heavily inspired by the Kubernetes’ implementation of the Container Storage Interface (CSI).
-However, bucket management lacks some of the notable requirements of block and file provisioning, such as no dependency on the kubelet, no node topology constraints, etc. This allows for an architecture with lower overall complexity.
-This proposal does _not_ include a standardized protocol or abstraction of storage vendor APIs.  
+This proposal introduces the Container Object Storage Interface (COSI), whose purpose is to provide a  standardized representation of object storage instances in Kubernetes with support for the most common object store interfaces.  Given a common interface, cluster workloads can be made COSI-aware, and able to ingest buckets via the Kubernetes control layer.  While absolute portability cannot be guaranteed because of incompatibilities between providers, workloads reliant on a given protocol (e.g. one of S3, GCS, Azure Blob) may be defined in a single manifest and deployed wherever that protocol is supported. 
 
-## Motivation 
+The COSI API wil also provide a path towards a community maintained COSI controller, which will be capable of bucket lifecycle operations.  It is anticipated that the controller provide an API such that pluggable drivers may be written to implement operations specific to the object store provider.  
 
-File and block are first class citizens within the Kubernetes ecosystem.  Object, though different on a fundamental level and lacking an open, committee controlled interface like POSIX, is a popular means of storing data, especially against very large data sources.   As such, we feel it is in the interest of the community to elevate buckets to a community supported feature.  In doing so, we can provide Kubernetes cluster users and administrators a normalized and familiar means of managing object storage.
+This proposal does _not_ include a standardized *protocol* or abstraction of storage vendor APIs.  
+
+## Motivation
+
+File and block are first class citizens within the Kubernetes ecosystem.  Object, though different on a fundamental level, is a popular means of storing data, especially against very large data sources.   As such, we feel it is in the interest of the community to elevate buckets to a community supported feature.  In doing so, we can provide Kubernetes cluster users and administrators a normalized and familiar means of managing object storage.
 
 ## Goals
-+ Define a control plane API in order to standardize and formalize Kubernetes bucket provisioning
-+ Be un-opinionated about the underlying object-store.
-+ Present similar workflows for both _greenfield_  and _brownfield_ bucket provisioning.
-+ Minimize privileges required to run a storage driver.
-+ Minimize technical ramp-up with a design that is familiar to CSI storage driver authors and Kubernetes storage admins.
++ Define a control plane API in order to standardize and formalize Kubernetes object storage representation.
++ As MVP, be accessible to the largest groups of consumers by supporting the major object storages protocols (S3, Google Cloud Storage, Azure Blob) while being extensible for future protocol additions.
++ Present similar workflows for both new-bucket and imported bucket operations.
 + Use standard Kubernetes mechanisms to sync a pod with the readiness of the bucket it will consume. This can be accomplished via Secrets.
 
 ## Non-Goals
 
 + Define a native _data-plane_ object store API which would greatly improve object store app portability.
 + Mirror the static workflow of PersistentVolumes wherein users are given the first available Volume.  Pre-provisioned buckets are expected to be non-empty and thus unique.
++ Strictly define automation around the COSI API.
 
 ##  Vocabulary
 
