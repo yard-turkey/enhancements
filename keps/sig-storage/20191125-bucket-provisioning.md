@@ -210,7 +210,15 @@ metadata:
   finalizers:
   - cosi.io/finalizer [2]
 spec:
-  requestProtocol: [3]
+  protocol:
+    name: ""
+    s3:
+      accessKeyId:
+      policy:
+    gcs: 
+      privateKeyName:
+    azure:
+      storageAccountName:
   bucketPrefix: [4]
   bucketClassName: [5]
   secretName: [6]
@@ -257,22 +265,23 @@ spec:
     name:
     namespace:
   protocol: [10]
-  protocolAzureBlob: [11]
-    storageAccountName:
-    accountKey:
-    containerName:
-  protocolS3: [12]
-    endpoint:
-    accessKeyId:
-    bucketName:
-    region:
-    signatureVersion:
-    userName:
-  protocolGcs: [13]
-    bucketName:
-    privateKeyName:
-    projectId:
-    serviceAccount:
+    type: ""
+    azureBlob: [11]
+      storageAccountName:
+      accountKey:
+      containerName:
+    s3: [12]
+      endpoint:
+      accessKeyId:
+      bucketName:
+      region:
+      signatureVersion:
+      userName:
+    gcs: [13]
+      bucketName:
+      privateKeyName:
+      projectId:
+      serviceAccount:
   parameters: [14]
 status:
   message: [15]
