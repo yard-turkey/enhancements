@@ -67,6 +67,7 @@ File and block are first class citizens within the Kubernetes ecosystem.  Object
 + Use standard Kubernetes mechanisms to sync a pod with the readiness of the bucket it will consume. This can be accomplished via Secrets.
 
 ## Non-Goals
+
 + Define a native _data-plane_ object store API which would greatly improve object store app portability.
 + Mirror the static workflow of PersistentVolumes wherein users are given the first available Volume.  Pre-provisioned buckets are expected to be non-empty and thus unique.
 
@@ -78,13 +79,9 @@ File and block are first class citizens within the Kubernetes ecosystem.  Object
    + _In Greenfield_: an abstraction of new bucket provisioning.
    + _In Brownfield_: an abstration of an existing objet store bucket.
 + _BucketContent_ - A cluster-scoped custom resource bound to a `Bucket` and containing relevant metadata.
-+ _Container Object Storage Interface (COSI)_ -  A specification of gRPC data and methods making up the communication protocol between the driver and the sidecar.
-+ _COSI Controller_ - A central controller responsible for managing `Buckets`, `BucketContents`, and Secrets.
-+ _Driver_ - A containerized gRPC server which implements a storage vendor’s business logic through the COSI interface. It can be written in any language supported by gRPC and is independent of Kubernetes.
 + _Greenfield Bucket_ - a new bucket created and managed by the COSI system.
 +  _Object_ - An atomic, immutable unit of data stored in buckets.
-+ _Sidecar_ - A `BucketContent` controller that communicates to the driver via a gRPC client.
-+ _Static Bucket_ - externally created and manually integrated but _lacking_ a provisioner.
++ _Driverless Bucket_ - externally created and manually integrated bucket with no installed provisioner.
 
 # Proposal
 
@@ -101,98 +98,15 @@ File and block are first class citizens within the Kubernetes ecosystem.  Object
 - As a developer, I can define my object storage needs in the same manifest as my workload, so that deployments are streamlined and encapsulated within the Kubernetes interface.
 - As a developer, I can define a manifest containing my workload and object storage configuration once, so that my app may be ported between clusters as long as the storage provided supports my designated data path protocol.
 
-  
-## System Configuration
+## API Relationships
 
-+ The COSI controller runs in the `cosi-system` namespace where it manages `Buckets`, `BucketContents`, and Secrets. This namespace name is not enforced but suggested.
-+ The Driver and Sidecar containers run together in a Pod and are deployed in any namespace, communicating via the Pod's internal network (_localhost:some-port_). We expect and will document that different drivers live in separate namespaces.
-+ Operations must be idempotent in order to handle failure recovery.
-
-### Unique Driver Names
-
-It is important that driver names are unique, otherwise multiple sidecars would try to handle the same `BucketContent` events (since the sidecar matches on driver name).   The prescribed pattern  to be used for all provisioner names
-
-## Workflows
+The diagram below indicates the relationships by reference between the proposed APIs, the user facing Kubernetes primitives, and the actual storage and identity instances.  COSI APIs (light green) bridge the gap between workloads and object stores, providing a standardized means of consuming object storage for Kubernetes operators and workloads.
 
 
 
-### Determining Case from BucketClass
+![](./bucket-api-relationships.png)
 
-| BucketClassFields             | SecretRef: non-nil | SecretRef: nil |
-| ----------------------------- | ------------------ | -------------- |
-| **BucketContentRef: non-nil** | Static             | Brownfield     |
-| **BucketContentRef: nil**     | Undefined          | Greenfield     |
-
-#### Create Bucket (Greenfield)
-
-1. The user creates a `Bucket` in their namespace, with reference to a `BucketClass`.
-1. The Controller sees the new `Bucket` and applies a `finalizer` for orchestrated deletions.
-1. The Controller gets the `BucketClass` referenced by the `Bucket`.
-1. The Controller creates a `BucketContent` object with its `BucketClassName` set to the name of the `BucketClass` and a `finalizer`.
-1. The Sidecar detects the new `BucketContent` object and gets the associated `BucketClass`.
-1. The Sidecar calls the CreateBucket() rpc, passing the `bucketClass.parameters` and is returned a bucket endpoint and credentials.
-1. The Sidecar creates a secret containing the endpoint and credentials, with a random/unique name and `ownerRef` set to `BucketContent`.
-1. The Sidecar updates `BucketContent.secretRef` with its `secret` name and namespace and sets `BucketContent.status.phase` to *“Ready”.*
-1. The Controller detects the `BucketContent` update and sees the *“Ready”* phase. 
-1. The Controller copies the generated `secret` to the `Bucket` namespace with name defined in `Bucket.secretName`.  The `secret` is created with an `ownerRef` of the `Bucket`.
-1. The Controller “binds” the `Bucket` and `BucketContent` by setting `bucket.status.bucketContentName` and `bucketContent.bucketRef`, and sets both statuses to *“Bound”*.
-1. The app `pod` ingests `secret` and runs.
-
-#### Grant Bucket Access (Brownfield)
-
-1. User creates a `Bucket` in their namespace, with reference to a `BucketClass`.
-1. Controller sees the new `Bucket` and applies a `finalizer` for orchestrated deletions.
-1. Controller gets the `BucketClass` referenced by the `Bucket`.
-1. Controller creates a `BucketContent` object with its `BucketClassName` set to the name of its `BucketClass` and a `finalizer`.
-1. Sidecar detects the new `BucketContent` object and gets the associated `BucketClass`.
-1. Sidecar calls the GrantBucketAccess() rpc, passing the `bucketClass.bucketIdentifier` and the `bucketClass.parameters` and is returned a bucket endpoint and credentials.
-1. Sidecar creates a `secret` containing the endpoint and credentials, with a random/unique name and `ownerRef` set to `BucketContent`.
-1. Sidecar updates `BucketContent.secretRef` with its `secret` name and namespace and sets `BucketContent.status.phase` to *“Ready”*.
-1. Controller detects the `BucketContent` update and sees the *“Ready”* phase. 
-1. Controller copies the generated `secret` to the `Bucket` namespace with name `Bucket.secretName`.  The `secret` is created with an ownerRef of the Bucket.
-1. Controller *“binds”* the `Bucket` and `BucketContent` by setting `bucket.status.bucketContentName` and `bucketContent.bucketRef`, and sets both statuses to *“Bound”*.
-1. App `pod` ingests `secret` and runs.
-
-#### Delete Or Revoke Access (Greenfield & Brownfield)
-
-1. The user deletes their `Bucket`, which blocks until the `finalizer` is removed.
-1. The Controller detects the event and sees the `deletionTimestamp` set in `Bucket` and gets the `BucketClass`. 
-1. If the `BucketClass.secretRef` is nil, the object store bucket is not static, and the process continues to step 4.
-1. The Controller deletes the referenced `BucketContent` object, which blocks until the `finalizer` is removed.
-1. The Sidecar detects the `BucketContent` event and sees the `deletionTimestamp`, and gets the referenced `BucketClass`.
-1. If the `BucketClass.bucketIdentifier` is nil, the Sidecar decides the `BucketClass.bucketIdentifier` is a greenfield object store bucket and calls the rpc associated with the `BucketClass.releasePolicy` (*DeleteBucket* or *RevokeBucketAccess*). Otherwise, the `BucketClass.bucketIdentifier` is non-nil, indicating that it is a brownfield object store bucket, and the Sidecar calls the *RevokeBucketAccess()* rpc.
-1. The Sidecar sets `BucketContent.status.phase` to *“Released”.*
-1. The Controller sees `BucketContent` status is “*Released*” and removes `BucketContent`’s `finalizer`.
-1. The `BucketContent` and the dependent `Secret` will be garbage collected.
-1. The Controller removes the `finalizer` from the `Bucket`, allowing it and it’s dependent `secret` to be garbage collected.
-
-### Static Buckets
-
-> Note: No driver, and thus no sidecar, are present to manage provisioning.
-
-#### Grant Access
-
-1. An admin defines a `BucketClass` and a `Secret` in a protected namespace, with the `BucketClass.secretRef` field referencing the `Secret`.
-1. The user creates a `Bucket` in their namespace, with reference to a `BucketClass`.
-1. The Controller sees the new `Bucket` and applies a `finalizer` for orchestrated deletions.
-1. The Controller gets the `BucketClass` referenced by the `Bucket`.
-1. The Controller creates a `BucketContent` object with `BucketClassName` set to the name of its `BucketClass`, a `finalizer`, the `secretRef` set to the `BucketClass`’s `secretRef`, and phase set to *“Ready”*.
-1. The Controller detects the `BucketContent` event and sees the *“Ready”* phase. 
-1. The Controller copies the admin defined `secret` to the `Bucket` namespace with name `Bucket.secretName`.  The `secret` is created with an `ownerRef` of the `Bucket`.
-1. The Controller “binds” the `Bucket` and `BucketContent` by setting `bucket.status.bucketContentName` and `bucketContent.bucketRef`, and sets both statuses to *“Bound”*.
-1. The app `pod` ingests `secret` and runs.
-
-#### Revoke Access
-
-1. The user deletes their `Bucket`, which blocks until the `finalizer` is removed.
-1. The Controller detects the event and sees the `deletionTimestamp` set in `Bucket` and gets the `Bucket`’s `BucketClass`.
-1. If the `BucketClass.secretRef` is non-nil, the object store bucket is static, and the process continues to step 4.
-1. The Controller deletes the referenced `BucketContent` object and sets the `BucketContent.status.phase` to *“Released”*.
-1. The Controller sees `BucketContent` status is *“Released”* and removes `BucketContent’`s `finalizer`.
-1. The `BucketContent` is garbage collected.  The admin/user defined `secret` will not be garbage collected as it is not a dependent of the `BucketContent`.
-1. The Controller removes the `finalizer` from the `Bucket`, allowing it and it’s dependent `secret` to be garbage collected.
-
-##  Custom Resource Definitions
+## Custom Resource Definitions
 
 #### Bucket
 
@@ -211,11 +125,12 @@ metadata:
   - cosi.io/finalizer [2]
 spec:
   protocol:
-    name: ""
+    type: ""
     s3:
       accessKeyId:
-      policy:
-    gcs: 
+      userName:
+    gcs:
+      serviceAccount:
       privateKeyName:
     azure:
       storageAccountName:
@@ -351,298 +266,3 @@ isDefaultBucketClass: [8]
 1. `secretRef`: (Optional) The name and namespace of an existing secret to be copied to the `Bucket`'s namespace for static provisioning.  Requires that `bucketContentRef` point to an existing `BucketContent` . Used for brownfield and static cases.
 1. `parameters`: (Optional) Object store specific string:string map passed to the driver.
 1. `isDefaultBucketClass`: boolean. When true, signals that the COSI controller should attempt to match `Bucket`’s without a defined `BucketClass` to this class, accounting for the `Bucket`’s requested protocol.  Multiple default classes for the same protocol will produce undefined behaviour, likely matching the first default class that is found.
-
-### RPC
-
-```protobuf
-syntax = "proto3";
-
-package cosi.v1;
-
-import "google/protobuf/descriptor.proto";
-
-option go_package = "github.com/container-object-store-interface/go-cosi";
-
-extend google.protobuf.MessageOptions {
-
-    // cosi_secret should be used to designate messages containing sensitive data
-    //             to provide protection against that data being logged or otherwise leaked.
-    bool cosi_secret = 1000;
-}
-
-message DriverInfoRequest {
-    // INTENTIONALLY BLANK
-}
-
-// DataProtocol defines a set of constants used in Create and Grant requests.
-enum DataProtocol {
-    PROTOCOL_UNSPECIFIED = 0;
-    AZURE_BLOB = 1;
-    GCS = 2;
-    S3 = 3;
-}
-
-// AccessMode defines a common set of permissions among object stores
-enum AccessMode {
-    MODE_UNSPECIFIED = 0;
-    RO = 1;
-    WO = 2;
-    RW = 3;
-}
-
-// S3SignatureVersion defines the 2 supported versions of S3's authentication
-enum S3SignatureVersion {
-    VERSION_UNSPECIFIED = 0;
-    V2 = 1;
-    V4 = 2;
-}
-
-message DriverInfoResponse {
-    // DriverName
-    string DriverName = 1;
-
-    // SupportedProtocols
-    repeated DataProtocol SupportedProtocols = 2;
-
-    // NextId = 3;
-}
-
-message CreateBucketRequest {
-    // RequestNameBucket
-    string RequestBucketName = 1;
-
-    // RequestProtocol
-    DataProtocol RequestProtocol = 2;
-
-    // DriverParameters
-    map<string, string> DriverParameters = 3;
-
-    AccessMode AccessMode = 4;
-
-    // NextId = 5;
-}
-
-message CreateBucketResponse {
-
-    message ProtocolAzureBlob {
-
-        string ContainerName = 1;
-
-        message AuthenticationData {
-            option (cosi_secret) = true;
-
-            string StorageAccountName = 1;
-            string AccountKey = 2;
-            string SasToken = 3;
-        }
-        AuthenticationData Authentication = 2;
-    }
-
-    message ProtocolGcs {
-
-        string BucketName = 1;
-        string ProjectId = 2;
-
-        message AuthenticationData {
-            option (cosi_secret) = true;
-
-            string ServiceAccountName = 1;
-            string PrivateKeyName = 2;
-            string PrivateKey = 3;
-        }
-        AuthenticationData Authentication = 3;
-    }
-
-    message ProtocolS3 {
-
-        string BucketName = 1;
-        string Region = 2;
-        string Endpoint = 3;
-
-        message AuthenticationData {
-            option (cosi_secret) = true;
-
-            string AccessKeyId = 1;
-            string SecretKey = 2;
-            string StsToken = 3;
-            string UserName = 4;
-
-            S3SignatureVersion SignatureVersion = 5;
-        }
-        AuthenticationData Authentication = 4;
-    }
-
-    // ProtocolResponse
-    oneof Protocol {
-        ProtocolAzureBlob AzureBlob = 1;
-        ProtocolGcs Gcs = 2;
-        ProtocolS3 S3 = 3;
-    }
-
-    // NextId = 4
-}
-
-message DeleteBucketRequest {
-    message ProtocolAzureBlob {
-        string ContainerName = 1;
-        string StorageAccountName = 2;
-    }
-
-    message ProtocolGcs {
-        string BucketName = 1;
-        string ProjectId = 2;
-        string PrivateKeyName = 3;
-        string ServiceAccountName = 4;
-    }
-
-    message ProtocolS3 {
-        string BucketName = 1;
-        string Region = 2;
-        string Endpoint = 3;
-        string AccessKeyId = 4;
-        string UserName = 5;
-        S3SignatureVersion SignatureVersion = 6;
-    }
-
-    enum BucketRetainPolicy {
-        RETAIN_POLICY_UNSPECIFIED = 0;
-        DELETE = 1;
-        RETAIN = 2;
-    }
-
-    BucketRetainPolicy RetainPolicy = 1;
-
-    map<string, string> DriverParameters = 2;
-
-    AccessMode AccessMode = 3;
-
-    oneof Protocol {
-        ProtocolAzureBlob AzureBlob = 4;
-        ProtocolGcs Gcs = 5;
-        ProtocolS3 S3 = 6;
-    }
-
-    // NextId = 7;
-}
-
-message DeleteBucketResponse {
-    // INTENTIONALLY BLANK
-}
-
-message GrantBucketAccessRequest {
-
-    message ProtocolAzureBlob {
-        string ContainerName = 1;
-        string StorageAccountName = 2;
-    }
-
-    message ProtocolGcs {
-        string BucketName = 1;
-        string ProjectId = 2;
-        string ServiceAccountName = 3;
-    }
-
-    message ProtocolS3 {
-        string BucketName = 1;
-        string Region = 2;
-        string Endpoint = 3;
-        string UserName = 5;
-        string AccessKeyId = 4; // probably too granular
-        S3SignatureVersion SignatureVersion = 6;
-    }
-
-    // DriverParameters
-    map<string, string> DriverParameters = 1;
-
-    AccessMode AccessMode = 2;
-
-    oneof Protocol {
-        ProtocolAzureBlob AzureBlob = 3;
-        ProtocolGcs Gcs = 4;
-        ProtocolS3 S3 = 5;
-    }
-
-    // NextId = 6;
-}
-
-message GrantBucketAccessResponse {
-    option (cosi_secret) = true;
-
-    message ProtocolAzureBlob {
-        string StorageAccountName = 1;
-        string AccountKey = 2;
-        string SasToken = 3;
-    }
-
-    message ProtocolGcs {
-        string ServiceAccountName = 1;
-        string PrivateKeyName = 2;
-        string PrivateKey = 3;
-    }
-
-    message ProtocolS3 {
-        string AccessKeyId = 1;
-        string SecretKey = 2;
-        string StsToken = 3;
-        string UserName = 4;
-        S3SignatureVersion SignatureVersion = 5;
-    }
-
-    oneof Protocol {
-        ProtocolAzureBlob AzureBlob = 1;
-        ProtocolGcs Gcs = 2;
-        ProtocolS3 S3 = 3;
-    }
-
-    // NextId = 4;
-}
-
-message RevokeBucketAccessRequest {
-    message ProtocolAzureBlob {
-        string ContainerName = 1;
-        string StorageAccountName = 2;
-    }
-
-    message ProtocolGcs {
-        string BucketName = 1;
-        string ProjectId = 2;
-        string PrivateKeyName = 3;
-        string ServiceAccountName = 4;
-    }
-
-    message ProtocolS3 {
-        string BucketName = 1;
-        string Region = 2;
-        string Endpoint = 3;
-        string AccessKeyId = 4;
-        string UserName = 5;
-        S3SignatureVersion SignatureVersion = 6;
-    }
-
-    map<string, string> DriverParameters = 1;
-
-    AccessMode AccessMode = 2;
-
-    oneof RequestProtocol {
-        ProtocolAzureBlob AzureBlob = 3;
-        ProtocolGcs Gcs = 4;
-        ProtocolS3 S3 = 5;
-    }
-}
-
-message RevokeBucketAccessResponse {
-    // INTENTIONALLY BLANK
-}
-
-service DynamicBucketHandler {
-    rpc CreateBucket (CreateBucketRequest) returns (CreateBucketResponse);
-    rpc DeleteBucket (DeleteBucketRequest) returns (DeleteBucketResponse);
-}
-
-service StaticBucketHandler {
-    rpc GrantBucketAccess (GrantBucketAccessRequest) returns (GrantBucketAccessResponse);
-    rpc RevokeBucketAccess (RevokeBucketAccessRequest) returns (RevokeBucketAccessResponse);
-}
-
-```
-
