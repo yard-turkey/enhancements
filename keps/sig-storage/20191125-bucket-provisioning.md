@@ -60,17 +60,15 @@ This proposal does _not_ include a standardized *protocol* or abstraction of sto
 
 ## Goals
 
-+ Define a control plane API in order to standardize and formalize Kubernetes object storage representation.
++ Define a control plane API in order to standardize and formalize Kubernetes object storage representation
 + As MVP, be accessible to the largest groups of consumers by supporting the major object storage protocols (S3, Google Cloud Storage, Azure Blob) while being extensible for future protocol additions.
-+ Present similar workflows for both new-bucket and imported bucket operations.
-+ Use standard Kubernetes mechanisms to sync a pod with the readiness of the bucket it will consume. This can be accomplished via Secrets.
++ Present similar workflows for both greenfield and brownfield bucket operations.
 
 ## Non-Goals
 
-+ Define a native _data-plane_ object store API which would greatly improve object store app portability.
-+ Mirror the static workflow of PersistentVolumes wherein users are given the first available Volume.  Pre-provisioned buckets are expected to be non-empty and thus unique.
-+ Strictly define automation around the COSI API.
-+ Abstract and/or automate IAM operations such that user or credential creation be obscured behind the COSI API.
++ Define the _data-plane_ object store interface.
++ Exactly define automation around the COSI API prior to initial acceptance
++ Manage user identities or roles
 
 ##  Vocabulary
 
@@ -91,7 +89,6 @@ This proposal does _not_ include a standardized *protocol* or abstraction of sto
 #### Admin
 
 - As a cluster administrator, I can manage multiple object store providers via the Kubernetes API and COSI automation, so that I do not have to become an expert in several different storage interfaces.
-- As a cluster administrator, I want to deploy a COSI-aware controller for managing storage policy, so that I can enforce Bucket policy from within Kubernetes.
 
 #### User
 
