@@ -46,15 +46,15 @@ status: provisional
 
 # Summary
 
-This proposal introduces the Container Object Storage Interface (COSI), whose purpose is to provide a  standardized representation of object storage instances in Kubernetes with support for the most common object store interfaces.  Goals and non-goals set the scope for the proposal by defining higher level objectives of the design.  The vocabulary section defineds common words used to describe aspects of the COSI system.  Following the definitions, the documents states admin and user stories to illustrate how COSI may fulfill cluster user requirements.  API relationships provides diagrams to illustrate the interconnnections between COSI APIs, user’s workloads, and object store service instances.  Lastly, the documents states the proposed API specs for the Bucket, BucketContent, and BucketClass objects.
+This proposal introduces Custom Resource Definitions (CRDs), for the purpose of standardizing object storage representations in Kubernetes.  Goals and non-goals set the scope for the proposal by defining higher level objectives.  The vocabulary section defines terminology.  User stories illustrate how these APIs may fulfill cluster user requirements.  Relationships between the APIs are provied to illustrate the interconnnections between object storage APIs, users' workloads, and object store service instances.  Lastly, the documents states the proposed API specs for the Bucket, BucketContent, and BucketClass objects.
 
 ## Motivation
 
 File and block are first class citizens within the Kubernetes ecosystem.  Object, though very different under the hood, is a popular means of storing data, especially against very large data sources.   As such, we feel it is in the interest of the community to elevate buckets to a community supported feature.  In doing so, we can provide Kubernetes cluster users and administrators a normalized and familiar means of managing object storage.
 
-Given a common interface, cluster workloads can be made COSI-aware, and able to ingest buckets via the Kubernetes control layer.  While absolute portability cannot be guaranteed because of incompatibilities between providers, workloads reliant on a given protocol (e.g. one of S3, GCS, Azure Blob) may be defined in a single manifest and deployed wherever that protocol is supported.
+While absolute portability cannot be guaranteed because of incompatibilities between providers, workloads reliant on a given protocol (e.g. one of S3, GCS, Azure Blob) may be defined in a single manifest and deployed wherever that protocol is supported.
 
-The COSI API will also provide a path towards a community maintained COSI controller, which will be capable of bucket lifecycle operations.  It is anticipated that the controller provide an API such that pluggable drivers may be written to implement operations specific to the object store provider.
+The object storage API will also provide a path towards community maintained automatio, which will be capable of bucket lifecycle operations.  It is anticipated that the controller provide an API such that pluggable drivers may be written to implement operations specific to the object store provider.
 
 This proposal does _not_ include a standardized *protocol* or abstraction of storage vendor APIs
 
@@ -67,7 +67,7 @@ This proposal does _not_ include a standardized *protocol* or abstraction of sto
 ## Non-Goals
 
 + Define the _data-plane_ object store interface.
-+ Exactly define automation around the COSI API prior to initial acceptance
++ Precisely define automation around proposed bucket APIs
 + Manage user identities or roles
 
 ##  Vocabulary
@@ -78,7 +78,7 @@ This proposal does _not_ include a standardized *protocol* or abstraction of sto
    + _In Greenfield_: an abstraction of new bucket provisioning.
    + _In Brownfield_: an abstration of an single existing object store bucket.
 + _BucketContent_ - A cluster-scoped custom resource bound to a [Bucket](#bucket) and containing relevant metadata.
-+ _Greenfield Bucket_ - a new bucket created and managed by the COSI system.
++ _Greenfield Bucket_ - a created bucket whose lifecycle is managed a controller
 +  _Object_ - An atomic, immutable unit of data stored in buckets.
 + _Driverless_ - a bucket manually defined by a user or admin with no installed provisioner.
 
@@ -88,28 +88,28 @@ This proposal does _not_ include a standardized *protocol* or abstraction of sto
 
 #### Admin
 
-- As a cluster administrator, I can manage multiple object store providers via the Kubernetes API and COSI automation, so that I do not have to become an expert in several different storage interfaces.
+- As a cluster administrator, I can manage multiple object store providers via the Kubernetes API, so that I can see all object storage instances from a single pane, regardless of the backing storage vendor.
 
 #### User
 
 - As a developer, I can define my object storage needs in the same manifest as my workload, so that deployments are streamlined and encapsulated within the Kubernetes interface.
 - As a developer, I can define a manifest containing my workload and object storage configuration once, so that my app may be ported between clusters as long as the storage provided supports my designated data path protocol.
-- As a developer, I want to create a workload controller which is COSI-aware, so that it can dynamically connect workloads to object storage instances.
+- As a developer, I want to create a workload controller which is bucket API aware, so that it can dynamically connect workloads to object storage instances.
 
 ## API Relationships
 
-The diagram below indicates the relationships, by reference, between the proposed APIs, the user facing Kubernetes primitives, and the actual storage and identity instances.  COSI APIs bridge the gap between workloads and object stores, providing a standardized means of consuming object storage for Kubernetes controllers and workloads.
+The diagram below indicates the relationships, by reference, between the proposed APIs, the user facing Kubernetes primitives, and the actual storage and identity instances.  Bucket APIs bridge the gap between workloads and object stores, providing a standardized means of consuming object storage for Kubernetes controllers and workloads.
 
 Secrets are used to store the cluster user’s object store authn/authz information, to be passed to automation so that operations can be performed on the user’s behalf.
 
-- **Green** objects represent COSI APIs.
+- **Green** objects represent Bucket APIs.
 - **Yellow** objects represent user defined Kubernetes primitives
 - **Red** objects represent platform service instances (i.e. storage and users)
 - **Grey** objects represent *possible* connectors between the Bucket API and workloads.
 
 ### Greenfield: Dynamic Bucket Creation
 
-In an automated system where bucket lifecycles are managed by a COSI controller, a user will define a [Bucket](#bucket), containing a reference a [Bucket Class](#bucketclass).  Bucket Classes are admin-created objects representing a preset configuration for bucket creation.  A [Bucket Content](#bucketcontent) object is generated and encapsulates all configuration information from the BucketClass and Bucket.  The BucketContent will store all necessary information about the provisioned storage instance, including connection data.
+In an automated system where bucket lifecycles are managed by a controller, a user will define a [Bucket](#bucket), containing a reference a [Bucket Class](#bucketclass).  Bucket Classes are admin-created objects representing a preset configuration for bucket creation.  A [Bucket Content](#bucketcontent) object is generated and encapsulates all configuration information from the BucketClass and Bucket.  The BucketContent will store all necessary information about the provisioned storage instance, including connection data.
 
 
 
@@ -129,11 +129,13 @@ BucketContent objects will be created for Buckets, with the connection informati
 
 ### Brownfield: Driverless Bucket Access
 
-Clusters with COSI automation deployed but without a provisioner to manage backend bucket operations may still support pseudo-dynamic Bucket access.  Similar to the [Brownfield: Dynamic Bucket Access](#greenfield-dynamic-bucket-creation), the BucketClass will specify a single pre-existing bucket.  
+Clusters with a bucket controller deployed but without a provisioner to manage backend bucket operations may still support pseudo-dynamic bucket access.  Similar to the [Brownfield: Dynamic Bucket Access](#greenfield-dynamic-bucket-creation), the BucketClass will specify a single pre-existing bucket.
+
+The key difference in this case is that without a driver to communicate with an object store, operations such as adding an identity to an ACL or managing bucket polices are not possible.  As such, applications must have credentials that are permissioned to access the backing bucket.  The API will serve purely as a representation of the bucket.
 
 ### Manually Managed Buckets
 
-Clusters with zero automation around the COSI API may still benefit from it when deploying COSI aware workload controllers (e.g. a controller managing data analytics jobs).   This case is releveant as it’s likely to be the first step towards adoption for some users.  In this case, admins would define BucketContents themselves and users would create Buckets with a prefilled `bucketContentRef` specifying the BucketContent.  After that, a COSI aware workload controller would be ready to inject connection and credential data from the BucketContent into a workload.
+Clusters with zero automation around the API still benefit from it when deploying Bucket aware workload-orchistrating controllers.   This case is releveant as it’s likely to be the first step towards adoption for some users.  The app will In this case, admins would define BucketContents themselves and users would create Buckets with a prefilled `bucketContentRef` specifying the BucketContent.  After that, a workload controller would be ready to inject connection and credential data from the BucketContent into the worker pods.
 
 ![](/Users/jcope/Workspace/go/src/github.com/yard-turkey/enhancements/keps/sig-storage/bucket-static-api-relation.png)
 
@@ -141,7 +143,7 @@ Clusters with zero automation around the COSI API may still benefit from it when
 
 ### Provisioner Secrets
 
-Per [Non-Goals](#non-goals), it is not within the scope of COSI to abstract IAM operations.  Instead, provisioner and user credentials should be provided to automation by admins or users.  
+Per [Non-Goals](#non-goals), it is not within the scope of the proposal to abstract IAM operations.  Instead, provisioner and user credentials should be provided to automation by admins or users.  
 
 BucketClass.Parameter key values are used to specify Secret name and namespace.  These may be considered of different degrees of granularity.
 
@@ -150,7 +152,7 @@ BucketClass.Parameter key values are used to specify Secret name and namespace. 
 
 This model should support both plain string values as well as “templates.”  Plain string values will allow admins to specify a particular Secret by name and namespace.  The key values should provide a means of defining *provisioner* credentials as well as *user* credentials.  User credentials may be required in cases where a user is being granted access to an existing bucket or when a user has permissions to create buckets themselves.
 
-As an example, the following key’s represent a minimun of what COSI automation should define.  `provisioner-secret*` keys specify Secret to be used for bucket operations.  `user-secret-*` keys specify Secrets containing user identity information.
+As an example, the following key’s represent a minimun of what automation should support.  `provisioner-secret*` keys specify Secret to be used for bucket operations.  `user-secret-*` keys specify Secrets containing user identity information.
 
 ```yaml
 cosi.io/provisioner-secret-name:
@@ -159,7 +161,7 @@ cosi.io/user-secret-name:
 cosi.io/user-secret-namespace:
 ```
 
-COSI automation should support templating of Secret names and namespaces. For example:
+Bucket automation should support templating of Secret names and namespaces. For example:
 
 ```yaml
 cosi.io/user-secret-name: "${bucket.name}"
@@ -195,8 +197,8 @@ status:
   phase: [8]
   conditions: 
 ```
-1. `labels`: COSI controller should add the label to its managed resources.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
-1. `finalizers`: COSI controller adds the finalizer to defer `Bucket` deletion until backend deletion ops succeed.
+1. `labels`: should be added by controller.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
+1. `finalizers`: should be added by controller to defer `Bucket` deletion until backend deletion ops succeed.
 1. `protocol`: specifies the desired protocol.  One of {“s3”, “gcs”, or “azureBlob”}.
 1. `bucketPrefix`: (Optional) prefix prepended to a randomly generated bucket name, eg. "YosemitePhotos-". If empty no prefix is appended.
 1. `bucketClassName`: Name of the target `BucketClass`.
@@ -228,7 +230,6 @@ spec:
     name:
     namespace:
     uuid:
-    resourceVersion:
   secretRef: [9]
     name:
     namespace:
@@ -253,9 +254,9 @@ status:
   conditions:
 ```
 1. `name`: Generated in the pattern of `<BUCKET-CLASS-NAME>'-'<RANDOM-SUFFIX>`. 
-1. `labels`: COSI controller should add the label to its managed resources.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
-1. `finalizers`: COSI controller adds the finalizer to defer Bucket deletion until backend deletion ops succeed.
-1. `provisioner`: The provisioner field defined in the BucketClass.  Used by sidecars to filter BucketContents.
+1. `labels`: should be added by controller..  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
+1. `finalizers`: should be added by controller to defer `Bucket` deletion until backend deletion ops succeed.
+1. `provisioner`: The provisioner field defined in the `BucketClass`.  Used by sidecars to filter BucketContents.
 1. `releasePolicy`: Prescribes outcome of a Delete events. **Note:** In Brownfield and Static cases, *Retain* is mandated.
     - _Delete_:  the bucket and its contents are destroyed
     - _Retain_:  the bucket and its data are preserved with only abstracting Kubernetes being destroyed
@@ -263,10 +264,9 @@ status:
 1. `bucketClassName`: Name of the associated `BucketClass`.
 1. `bucketRef`: the name & namespace of the associated `Bucket`.
    
-    - `name` : the Bucket’s name
-    - `namespace`: the Bucket’s namespace
-    - `uuid`: the Bucket’s API server generated UUID
-    - `resourceVersion`: the Bucket's resourceVersion
+    - `name` : the `Bucket`’s name
+    - `namespace`: the `Bucket’`s namespace
+    - `uuid`: the `Bucket`’s API server generated UUID
 1. `secretRef`: the name and namespace of the source secret.  This `secret` is either generated by the driver or created by an admin.
 1. `protocolAzureBlob`: data required to target a provisioned azure container and/or storage account
 1. `protocol`: the protocol specified by the `Bucket`.
@@ -301,11 +301,11 @@ parameters: [7]
 ```
 
 1. `provisioner`: The name of the driver. If supplied the driver container and sidecar container are expected to be deployed. If omitted the `secretRef` is required for static provisioning.
-1. `isDefaultBucketClass`: boolean. When true, signals that the COSI controller should attempt to match `Bucket`’s without a defined `BucketClass` to this class, accounting for the `Bucket`’s requested protocol.  Multiple default classes for the same protocol will produce undefined behaviour.
+1. `isDefaultBucketClass`: boolean. When true, signals that the controller should attempt to match `Bucket`’s without a defined `BucketClass` to this class, accounting for the `Bucket`’s requested protocol.  Multiple default classes for the same protocol will produce undefined behaviour.
 1. `supportedProtocols`: protocols the associated object store supports.  Applied when matching Bucket to BucketClasses.
 1. `accessMode`: (Optional) ACL setting specifying the default accessibility of .
 1. `private`: ACL setting specifying if the a generated storage instance should be publicly accessible.  Common setting among protocols.
 1. `releasePolicy`: Prescribes outcome of a Delete events. **Note:** In Brownfield and Static cases, *Retain* is mandated. 
     - `Delete`:  the bucket and its contents are destroyed
     - `Retain`:  the bucket and its data are preserved with only abstracting Kubernetes being destroyed
-1. `parameters`: (Optional)  A map of string, string key values.  This map may contain values defined by COSI and / or the backing driver.
+1. `parameters`: (Optional)  A map of string, string key values.  Contains values passed to the bucket API’s controller and/or drivers
