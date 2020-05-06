@@ -242,6 +242,7 @@ spec:
       bucketName:
       region:
       signatureVersion:
+      publicAccess:
     gcs: [13]
       bucketName:
       privateKeyName:
@@ -295,7 +296,6 @@ provisioner: [1]
 isDefaultBucketClass: [2]
 supportedProtocols: {"azureblob", "gcs", "s3", ... } [3]
 accessMode: {"ro", "wo", "rw"} [4]
-private: boolean [5]
 releasePolicy: {"Delete", "Retain"} [6]
 parameters: [7]
 ```
@@ -304,7 +304,7 @@ parameters: [7]
 1. `isDefaultBucketClass`: boolean. When true, signals that the controller should attempt to match `Bucket`’s without a defined `BucketClass` to this class, accounting for the `Bucket`’s requested protocol.  Multiple default classes for the same protocol will produce undefined behaviour.
 1. `supportedProtocols`: protocols the associated object store supports.  Applied when matching Bucket to BucketClasses.
 1. `accessMode`: (Optional) ACL setting specifying the default accessibility of .
-1. `private`: ACL setting specifying if the a generated storage instance should be publicly accessible.  Common setting among protocols.
+1. `isPublic`: ACL setting specifying if the a generated storage instance should be publicly accessible.  Common setting among protocols.
 1. `releasePolicy`: Prescribes outcome of a Delete events. **Note:** In Brownfield and Static cases, *Retain* is mandated. 
     - `Delete`:  the bucket and its contents are destroyed
     - `Retain`:  the bucket and its data are preserved with only abstracting Kubernetes being destroyed
