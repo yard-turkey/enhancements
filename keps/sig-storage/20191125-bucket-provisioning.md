@@ -33,10 +33,9 @@ status: provisional
       - [Admin](#admin)
       - [User](#user)
   - [API Relationships](#api-relationships)
-    - [Greenfield: Dynamic Bucket Creation](#greenfield-dynamic-bucket-creation)
-    - [Brownfield: Dynamic Bucket Access](#brownfield-dynamic-bucket-access)
-    - [Brownfield: Driverless Bucket Access](#brownfield-driverless-bucket-access)
-    - [Manually Managed Buckets](#manually-managed-buckets)
+    - [Greenfield](#greenfield)
+      - [Sharing Dynamically Created Buckets](#sharing-dynamically-created-buckets)
+    - [Brownfield](#brownfield)
     - [Provisioner Secrets](#provisioner-secrets)
   - [Custom Resource Definitions](#custom-resource-definitions)
       - [Bucket](#bucket)
@@ -46,7 +45,7 @@ status: provisional
 
 # Summary
 
-This proposal introduces Custom Resource Definitions (CRDs), for the purpose of standardizing object storage representations in Kubernetes.  Goals and non-goals set the scope for the proposal by defining higher level objectives.  The vocabulary section defines terminology.  User stories illustrate how these APIs may fulfill cluster user requirements.  Relationships between the APIs are provied to illustrate the interconnnections between object storage APIs, users' workloads, and object store service instances.  Lastly, the documents states the proposed API specs for the Bucket, BucketContent, and BucketClass objects.
+This proposal introduces Custom Resource Definitions (CRDs), for the purpose of standardizing object storage representations in Kubernetes.  Goals and non-goals set the scope for the proposal by defining higher level objectives.  The vocabulary section defines terminology.  User stories illustrate how these APIs may fulfill cluster user requirements.  Relationships between the APIs are provided to illustrate the interconnections between object storage APIs, users' workloads, and object store service instances.  Lastly, the documents states the proposed API specs for the Bucket, BucketContent, and BucketClass objects.
 
 ## Motivation
 
@@ -69,16 +68,15 @@ This proposal does _not_ include a standardized *protocol* or abstraction of sto
 + Define the _data-plane_ object store interface.
 + Precisely define automation around proposed bucket APIs
 + Manage user identities or roles
++ Create a bucket policy interface
 
 ##  Vocabulary
 
-+  _Brownfield Bucket_ - externally created and represented by a [BucketClass](#bucketclass) and managed by a provisioner.
++  _Brownfield Bucket_ - a bucket created out of band, to be represented in the cluster.
 + _Bucket_ - A user-namespaced custom resource representing an object store bucket.
-+  _BucketClass_ - A cluster-scoped custom resource containing fields defining the provisioner and an immutable parameter set.
-   + _In Greenfield_: an abstraction of new bucket provisioning.
-   + _In Brownfield_: an abstration of an single existing object store bucket.
++  _BucketClass_ - A cluster-scoped custom resource containing fields defining the provisioner and an immutable parameter set for creating a new bucket
 + _BucketContent_ - A cluster-scoped custom resource bound to a [Bucket](#bucket) and containing relevant metadata.
-+ _Greenfield Bucket_ - a created bucket whose lifecycle is managed a controller
++ _Greenfield Bucket_ - a bucket created by dynamically by automation
 +  _Object_ - An atomic, immutable unit of data stored in buckets.
 + _Driverless_ - a bucket manually defined by a user or admin with no installed provisioner.
 
@@ -98,28 +96,53 @@ This proposal does _not_ include a standardized *protocol* or abstraction of sto
 
 ## API Relationships
 
-The diagram below indicates the relationships, by reference, between the proposed APIs, the user facing Kubernetes primitives, and the actual storage and identity instances.  Bucket APIs bridge the gap between workloads and object stores, providing a standardized means of consuming object storage for Kubernetes controllers and workloads.
+The diagrams below illustrate the connections between the proposed APIs, the user facing Kubernetes primitives, and the actual storage and identity instances.
 
-Secrets are used to store the cluster user’s object store authn/authz information, to be passed to automation so that operations can be performed on the user’s behalf.
+Secrets are used to store the cluster user’s cloud service authn/authz information.
 
-- **Green** objects represent Bucket APIs.
-- **Yellow** objects represent user defined Kubernetes primitives
-- **Red** objects represent platform service instances (i.e. storage and users)
-- **Grey** objects represent *possible* connectors between the Bucket API and workloads.
+> Note: This proposal assumes an integration of Bucket APIs into Pods, similar to that of Volumes such that Pods may consume Buckets directly.  This is subject to change in the design and implementation of the Kubernetes controller(s) for these APIs.
 
-### Greenfield: Dynamic Bucket Creation
+### Greenfield
 
-In an automated system where bucket lifecycles are managed by a controller, a user will define a [Bucket](#bucket), containing a reference a [Bucket Class](#bucketclass).  Bucket Classes are admin-created objects representing a preset configuration for bucket creation.  A [Bucket Content](#bucketcontent) object is generated and encapsulates all configuration information from the BucketClass and Bucket.  The BucketContent will store all necessary information about the provisioned storage instance, including connection data.
+In an automated system where bucket lifecycles are managed by a controller:
 
+1. A BucketClass is defined to enable the provisioning of object store storage, with a specified configuration.
 
+2. A user will define a [Bucket](#bucket) with the [BucketClass](#bucketclass) specified.  
+
+3. A [BucketContent](#bucketcontent) is instantiated and encapsulates all configuration information from the BucketClass and Bucket.  The BucketContent will store all necessary information about the provisioned storage instance, including connection data.  Credentials and other sensitive information should not be stored in a BucketContent.  
+
+4. A driver will then provision the object storage and return the connection information, to be written to the BucketContent.
+
+   
 
 ![](./bucket-greenfield-api-relations.png)
 
-### Brownfield: Dynamic Bucket Access
 
-The expected workflow for interacting with a pre-existing storage instance is similar to [Greenfield](#). The key distinction in this scenario is that a Bucket Class will reference a single, pre-existing bucket directly (indicated by the bold dashed line).  The key values for specifying storage instances should be made in the BucketClass’s parameters.  
 
-BucketContent objects will be created for Buckets, with the connection information for the storage instance populated from the BucketClass’s .  As part of this operation, the identity specified in the Bucket’s Secret should be granted permission to access the storage instance.  This operation should be configurable through the BucketClass parameters.
+#### Sharing Dynamically Created Buckets
+
+Once a [BucketContent](#bucketcontent) is created, it is discoverable by other users in the cluster.  
+
+5. In order to access the BucketContent, a user may create a [Bucket](#bucket) that specifies the BucketContent by name.
+
+> Note: Per [Non-Goals](#non-goals), access management is not within the scope of this KEP.  ACLs, access policies, and credentialing should be handled out of band.
+
+
+
+![](./bucket-greenfield-api-relations-sharing.png)
+
+
+
+### Brownfield
+
+“Brownfield” describes any case where the bucket already exists in the cloud service and is *not yet represented* by a [BucketContent](#bucketcontent) instance.  In order to publish the cloud service bucket to the cluster:
+
+1. The bucket should already be provisioned in the cloud service.
+1. A BucketContent is created to represent the provisioned bucket.  
+1. Once done, Bucket API instances may be created by users, specifying the desired BucketContent.
+
+>  Note: Per [Non-Goals](#non-goals), access management is not within the scope of this KEP.  ACLs, access policies, and credentialing should be handled out of band.  BucketContents may be configured to whitelist access for specific namespaces.
 
 
 
@@ -127,32 +150,15 @@ BucketContent objects will be created for Buckets, with the connection informati
 
 
 
-### Brownfield: Driverless Bucket Access
-
-Clusters with a bucket controller deployed but without a provisioner to manage backend bucket operations may still support pseudo-dynamic bucket access.  Similar to the [Brownfield: Dynamic Bucket Access](#greenfield-dynamic-bucket-creation), the BucketClass will specify a single pre-existing bucket.
-
-The key difference in this case is that without a driver to communicate with an object store, operations such as adding an identity to an ACL or managing bucket polices are not possible.  As such, applications must have credentials that are permissioned to access the backing bucket.  The API will serve purely as a representation of the bucket.
-
-### Manually Managed Buckets
-
-Clusters with zero automation around the API still benefit from it when deploying Bucket aware workload-orchistrating controllers.   This case is releveant as it’s likely to be the first step towards adoption for some users.  The app will In this case, admins would define BucketContents themselves and users would create Buckets with a prefilled `bucketContentRef` specifying the BucketContent.  After that, a workload controller would be ready to inject connection and credential data from the BucketContent into the worker pods.
-
-![](/Users/jcope/Workspace/go/src/github.com/yard-turkey/enhancements/keps/sig-storage/bucket-static-api-relation.png)
-
-
-
 ### Provisioner Secrets
 
 Per [Non-Goals](#non-goals), it is not within the scope of the proposal to abstract IAM operations.  Instead, provisioner and user credentials should be provided to automation by admins or users.  
 
-BucketClass.Parameter key values are used to specify Secret name and namespace.  These may be considered of different degrees of granularity.
+To allow for flexibility in authorizing provisioner operations, credentials may be provided to the provisioner in several ways.
 
-- **Per Provisioner:** the Secret is used for all provisioning operations.  These Secrets should be injected directly in provisioner containers via [common Kubernetes patterns](https://kubernetes.io/docs/tasks/inject-data-application/distribute-credentials-secure/).
-- **Per Operation/Bucket:** Secret’s data is passed to provisioners per operation or Bucket.  These Secrets should be defined as BucketClass parameters.  The keys should be clearly defined during automation design.
+- **Per Provisioner:** the Secret is used for all provisioning operations, for the lifetime of the provisioner.  These Secrets should be injected directly into the provisioner's container via [common Kubernetes patterns](https://kubernetes.io/docs/tasks/inject-data-application/distribute-credentials-secure/).
 
-This model should support both plain string values as well as “templates.”  Plain string values will allow admins to specify a particular Secret by name and namespace.  The key values should provide a means of defining *provisioner* credentials as well as *user* credentials.  User credentials may be required in cases where a user is being granted access to an existing bucket or when a user has permissions to create buckets themselves.
-
-As an example, the following key’s represent a minimun of what automation should support.  `provisioner-secret*` keys specify Secret to be used for bucket operations.  `user-secret-*` keys specify Secrets containing user identity information.
+Credentials may also be specified at more granular levels in order to allow for context dependent keys.  E.g. When authorization differs between BucketClasses or between individual operations.  This may be facilitated by defining a set of string keys which the core automation will be aware of, so that Secrets may be referenced by BucketClasses.  For example:
 
 ```yaml
 cosi.io/provisioner-secret-name:
@@ -161,14 +167,30 @@ cosi.io/user-secret-name:
 cosi.io/user-secret-namespace:
 ```
 
-Bucket automation should support templating of Secret names and namespaces. For example:
+- **Per BucketClass:** A secret may be made specific to a BucketClass.  This suits cases where authorization may be segregated in the object store.  The Secret may then be defined explicitly in the `bucketClass.parameters` map.
 
-```yaml
-cosi.io/user-secret-name: "${bucket.name}"
-cosi.io/user-secret-namespace: "${bucket.namespace}-region-west"
-```
+  ```yaml
+  cosi.io/provisioner-secret-name: "foo"
+  cosi.io/provisioner-secret-namespace: "bar"	
+  ```
 
-> Note: Annotation key templates are not mentioned as of yet.  However, need for them may arise during automation design.
+- **Per Operation/Bucket:** Unique credentials are passed per Bucket or operation. In order to support dynamic Secret naming, templating similar to [CSI Secret templating](https://kubernetes-csi.github.io/docs/secrets-and-credentials-storage-class.html) may be used.  E.g.
+
+  ```yaml
+  "${bucket.name}"
+  "${bucket.namespace}"
+  ```
+  
+  Admins may then define a BucketClass with the following parameters included:
+
+  *Per Bucket Operation*
+  
+  ```yaml
+  cosi.io/provisioner-secret-name: "${bucket.name}"
+  cosi.io/provisioner-secret-namespace: "${bucket.namespace}"	
+  ```
+
+
 
 ## Custom Resource Definitions
 
@@ -191,7 +213,7 @@ spec:
   protocol: [3]
   bucketPrefix: [4]
   bucketClassName: [5]
-  accessSecretName: [6]
+  secretName: [6]
 status:
   bucketContentName: [7]
   phase: [8]
@@ -202,7 +224,7 @@ status:
 1. `protocol`: specifies the desired protocol.  One of {“s3”, “gcs”, or “azureBlob”}.
 1. `bucketPrefix`: (Optional) prefix prepended to a randomly generated bucket name, eg. "YosemitePhotos-". If empty no prefix is appended.
 1. `bucketClassName`: Name of the target `BucketClass`.
-1. `userSecretName`: (optional) Secret in the Bucket’s namespace storing credentials to be used by a workload for bucket access.
+1. `secretName`: (optional) Secret in the Bucket’s namespace storing credentials to be used by a workload for bucket access.
 1. `bucketContentName`: Name of a bound `BucketContent`.
 1. `phase`: 
    - *Pending*: The controller has detected the new `Bucket` and begun provisioning operations
@@ -283,8 +305,6 @@ status:
 #### BucketClass
 
 A cluster-scoped custom resource used to describe both greenfield and brownfield buckets.  The `BucketClass` defines a release policy, and specifies driver specific parameters and the provisioner name. The `provisioner` value is used by sidecars to filter `BucketContent` objects.
-
-There is currently no default bucket class.
 
 ```yaml
 apiVersion: cosi.io/v1alpha1
