@@ -72,7 +72,7 @@ This proposal does _not_ include a standardized *protocol* or abstraction of sto
 ##  Vocabulary
 
 +  _Brownfield Bucket_ - a bucket created out of band, to be represented in the cluster.
-+ _Bucket_ - A user-namespaced custom resource representing an object store bucket.
++ _BucketRequest_ - A user-namespaced custom resource representing an object store bucket.
 +  _BucketClass_ - A cluster-scoped custom resource containing fields defining the provisioner and an immutable parameter set for creating new buckets
 + _Bucket_ - A cluster-scoped custom resource bound to a [Bucket](#bucket) and containing relevant metadata.
 + _Greenfield Bucket_ - a bucket created by dynamically by automation
