@@ -106,7 +106,7 @@ This proposal does _not_ include a standardized *protocol* or abstraction of sto
 
 #### BucketRequest
 
-A namespaced API representing a workload’s need for a storage instance endpoint. Created in the workload's namespace.  A BucketAccessRequest is required in order to gain credentialed access to the storage instance.
+A namespaced API representing a workload’s need for a storage instance endpoint. Created in the workload's namespace.  A [BucketAccessRequest](#bucketaccessrequest) is required in order to gain credentialed access to the storage instance.
 
 
 ```yaml
@@ -339,7 +339,7 @@ The diagram below illustrate the connections between the proposed APIs, Kubernet
 
 > Note: Controllers are omitted for simplicity.
 
-![](./bucket-api-relationships.png)
+![](./bucket-api-diagrams-API-relationships.png)
 
 
 
