@@ -71,13 +71,13 @@ This proposal does _not_ include a standardized *protocol* or abstraction of sto
 
 ##  Vocabulary
 
-+  _Brownfield Bucket_ - a bucket created out of band, to be represented in the cluster.
-+ _BucketRequest_ - A user-namespaced custom resource representing an object store bucket.
++  _Brownfield Bucket_ - a storage instance created out of band.
++ _BucketRequest_ - A user-namespaced custom resource representing a request for a storage instance endpoint.
 +  _BucketClass_ - A cluster-scoped custom resource containing fields defining the provisioner and an immutable parameter set for creating new buckets
-+ _Bucket_ - A cluster-scoped custom resource bound to a [Bucket](#bucket) and containing relevant metadata.
-+ _Greenfield Bucket_ - a bucket created by dynamically by automation
++ _Bucket_ - A cluster-scoped custom resource referenced by a Bucket and containing connection information and metadata for a storage instance.
++ _Greenfield Bucket_ - a bucket created by automation
 +  _Object_ - An atomic, immutable unit of data stored in buckets.
-+ _Driverless_ - a bucket manually defined by a user or admin with no installed provisioner.
++ _Driverless_ - A system where not driver is deployed to automate object store operations.  COSI automation may still be deployed to managed COSI APIs.  See [Architecture](#architecture).
 
 # Proposal
 
