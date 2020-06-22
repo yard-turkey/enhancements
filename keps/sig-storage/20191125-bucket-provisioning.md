@@ -75,8 +75,9 @@ This proposal does _not_ include a standardized *protocol* or abstraction of sto
 + _BucketRequest_ - A user-namespaced custom resource representing a request for a storage instance endpoint.
 +  _BucketClass_ - A cluster-scoped custom resource containing fields defining the provisioner and an immutable parameter set for creating new buckets
 + _Bucket_ - A cluster-scoped custom resource referenced by a Bucket and containing connection information and metadata for a storage instance.
-+ _Greenfield Bucket_ - a bucket created by automation
++ _Greenfield Bucket_ - a bucket created by automation.
 +  _Object_ - An atomic, immutable unit of data stored in buckets.
++  *Storage Instance* - Refers to the back object storage endpoint being abstracted by the Bucket API (a.k.a “bucket” or “container”).
 + _Driverless_ - A system where not driver is deployed to automate object store operations.  COSI automation may still be deployed to managed COSI APIs.  See [Architecture](#architecture).
 
 # Proposal
@@ -105,7 +106,7 @@ This proposal does _not_ include a standardized *protocol* or abstraction of sto
 
 #### BucketRequest
 
-A user facing API object representing an object store bucket. Created by a user in their app's namespace. Once provisiong is complete, the `BucketRequest` is "bound" to the corresponding `Bucket`. Binding is 1:1, meaning there is only one `Bucket` per `BucketRequest` and vice-versa.
+A namespaced API representing a workload’s need for a storage instance endpoint. Created in the workload's namespace.  A BucketAccessRequest is required in order to gain credentialed access to the storage instance.
 
 
 ```yaml
@@ -123,19 +124,19 @@ spec:
   bucketPrefix: [4]
   bucketClassName: [5]
   secretName: [6]
+  bucket: [7]
 status:
-  BucketName: [7]
-  phase: [8]
+  phase: [9]
   conditions: 
 ```
 
 1. `labels`: should be added by controller.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
 1. `finalizers`: should be added by controller to defer BucketRequest deletion until backend deletion ops succeed.
 1. `protocol`: specifies the desired protocol.  One of {“s3”, “gcs”, or “azureBlob”}.
-1. `bucketPrefix`: (Optional) prefix prepended to a randomly generated bucket name, eg. "YosemitePhotos-". If empty no prefix is prepended.
+1. `bucketPrefix`: (Optional) prefix prepended to a randomly generated bucket name, eg. “yosemite-photos-". If empty no prefix is prepended.
 1. `bucketClassName`: Name of the target BucketClass.
 1. `secretName`: (optional) Secret in the BucketRequest's namespace storing credentials to be used by a workload for bucket access.
-1. `BucketName`: Name of a bound Bucket.
+1. `bucket`: Name of the Bucket instance representing the desired storage instance endpoint.  Set by the COSI Controller for new Buckets.  Specified by the user when connecting to existing buckets.
 1. `phase`: 
    - *Pending*: The controller has detected the new `Bucket` and begun provisioning operations
    - *Bound*: Provisioning operations have completed and the `Bucket` has been bound to a `Bucket`.
@@ -179,6 +180,10 @@ spec:
 status:
   message: [14]
   phase: [15]
+  boundBucketRequests: [16]
+  - name:
+    namespace:
+    uuid:
   conditions:
 ```
 
@@ -203,6 +208,7 @@ status:
    - _Released_: the `Bucket` has been deleted, signalling that the `Bucket` is ready for garbage collection.
    - _Failed_: error and all retries have been exhausted.
    - _Retrying_: set when a driver or Kubernetes error is encountered during provisioning operations indicating a retry loop.
+- `boundBucketRequests`: a pseudo-synchronous array of BucketRequests currently bound to this Bucket.
 
 #### BucketClass
 
