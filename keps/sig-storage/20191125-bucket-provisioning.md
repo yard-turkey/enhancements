@@ -329,11 +329,9 @@ parameters: [4]
 1. policyActions: a set of provisioner/platform defined policy actions to allow or deny a given user identity.
 1. `parameters`:   (Optional)  A map of string, string key values.  Allows admins to control user and access provisioning by setting provisioner key-values.
 
-## Architecture
-
 ### API Relationships
 
-The diagram below illustrate the connections between the proposed APIs, Kubernetes APIs, and the actual storage and identity instances.
+The diagram below illustrates the connections between the proposed CRDs, Kubernetes APIs, and the actual storage and identity instances.  These connections exist as fields within an API whose value is a reference to another API instance.  This reference value must contain the targeted API instance’s name, namespace, and uuid.
 
 > Note: Controllers are omitted for simplicity.
 
@@ -341,21 +339,13 @@ The diagram below illustrate the connections between the proposed APIs, Kubernet
 
 
 
-### Controller Architecture
+---
 
-The COSI controller architecture is composed of a single, centralized controller (COSI Controller), and one or more Provisioners.  Provisioners are Pods running a Sidecar container and a Driver container.
+## COSI Architecture (Warning - Construction Area)
 
-- Sidecar: A COSI maintained controller whose purpose it to watch `BucketAccess` and `Bucket` API instances and execute methods defined in the COSI interface.
-- Driver: A server-side implementation of the COSI interface which performs the actual provisioning/deprovisioining operations on behalf of the Sidecar.
+### Topology
 
-
-
-The COSI Controller is responsible for:
-
-- Watching `BucketAccessRequests` and `Buckets` across the cluster.
-- Creating `BucketAccess` and `Bucket` objects in 
-
-![](./bucket-api-diagrams-controller-arch.png)
+![](./bucket-api-diagrams-topology.png)
 
 
 
@@ -392,7 +382,9 @@ Once a [Bucket](#Bucket) is created, it is discoverable by other users in the cl
 
 >  Note: Per [Non-Goals](#non-goals), access management is not within the scope of this KEP.  ACLs, access policies, and credentialing should be handled out of band.  Buckets may be configured to whitelist access for specific namespaces.
 
-### Provisioner Secrets
+---
+
+## Provisioner Secrets
 
 Per [Non-Goals](#non-goals), it is not within the scope of the proposal to abstract IAM operations.  Instead, provisioner and user credentials should be provided to automation by admins or users.  
 
