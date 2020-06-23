@@ -143,7 +143,7 @@ status:
 
 #### Bucket
 
-A cluster-scoped resource representing an object store bucket. The `Bucket` is expected to store stateful data relevant to bucket deprovisioning. The `Bucket` is bound to the `Bucket` in a 1:1 mapping. For MVP a `Bucket` is not reused.
+A cluster-scoped resource representing a storage instance.  A Bucket should contain enough information to enable the requesting client to access the storage instance.  At a minimum, a Bucket must store enough identifying information such in order for drivers to accurately target the storage instance (e.g. during a deletion process).
 
 ```yaml
 apiVersion: cosi.io/v1alpha1
@@ -157,15 +157,16 @@ Metadata:
 spec:
   provisioner: [4]
   releasePolicy: [5]
-  accessMode: [6]
+  anonymousAccessMode: [6]
   bucketClassName: [7]
-  bindableNamespaces: [8]
+  permittedNamespaces: [8]
     - name:
-      uid:
+      uuid:
   protocol: [9]
     type: ""
     azureBlob: [10]
       containerName:
+      storageAccount:
     s3: [11]
       endpoint:
       bucketName:
@@ -191,21 +192,22 @@ status:
 1. `labels`: should be added by controller..  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
 1. `finalizers`: should be added by controller to defer `Bucket` deletion until backend deletion ops succeed.
 1. `provisioner`: The provisioner field defined in the `BucketClass`.  Used by sidecars to filter Buckets.
-1. `releasePolicy`: Prescribes outcome of a Delete events. **Note:** In Brownfield and Static cases, *Retain* is mandated.
-   - _Delete_:  the bucket and its contents are destroyed
-   - _Retain_:  the bucket and its data are preserved with only abstracting Kubernetes being destroyed
-1. `accessMode`: Declares the level of access given to credentials provisioned through this class.     If empty, drivers may set defaults.
-1. `bucketClassName`: Name of the associated `BucketClass`.
-1. `bindableNamespaces`: An array of namespaces, identified by a name and uid, that are permitted to bind Buckets to this Bucket.  Provided to allow admins a layer of control in who can access the backing bucket.  Does **not** reflect or alter the backing bucket’s ACLs or access policies.
-1. `protocol`: the protocol specified by the `Bucket`.
-1. protocolAzureBlob`: data required to target a provisioned azure container and/or storage account
-1. `protocolS3`: data required to target a provisioned S3 bucket and/or user
-1. `protocolGcs`: data required to target a provisioned GCS bucket and/or service account
-1. `parameters`: a copy of the BucketClass parameters
-1. `message`: a human readable description detailing the reason for the current `phase``
-1. `phase`: is the current state of the `Bucket`:
-   - _Bound_: the controller finished processing the request and bound the `Bucket` and `Bucket`
-   - _Released_: the `Bucket` has been deleted, signalling that the `Bucket` is ready for garbage collection.
+1. `releasePolicy`: Prescribes outcome of a Delete events. **Note:** In Brownfield cases, backing storage instance is Retained, and never deleted.
+   - _Delete_:  the bucket and its contents are destroyed.
+   - _Retain_:  the bucket and its data are preserved with only abstracting Kubernetes being destroyed.
+1. `anonymousAccessMode`: Declares the level of access given to credentials provisioned through this class.  If empty, drivers may set defaults.
+1. `bucketClassName`: Name of the associated BucketClass.
+1. permittedNamespaces: An array of namespaces, identified by a name and uuid, from which  BucketRequests can bind to a Bucket (primarily applicable in Brownfield).  Provided to allow admins a layer of cluster-layer access control.  Does **not** reflect or alter the backing storage instances' ACLs or IAM policies.
+1. `protocol`: The protocol the application will use to access the storage instance.
+   - `type`: Specifies the protocol targeted by this Bucket instance.  One of:
+     - `azureBlob`: data required to target a provisioned azure container and/or storage account.
+     - `s3`: data required to target a provisioned S3 bucket and/or user.
+     - `gcs`: data required to target a provisioned GCS bucket and/or service account.
+1. `parameters`: a copy of the BucketClass parameters.
+1. `message`: a human readable description detailing the reason for the current `phase``.
+1. `phase`: is the current state of the Bucket:
+   - _Bound_: the controller finished processing the request and bound the Bucket and Bucket.
+   - _Released_: the Bucket has been deleted, signalling that the Bucket is ready for garbage collection.
    - _Failed_: error and all retries have been exhausted.
    - _Retrying_: set when a driver or Kubernetes error is encountered during provisioning operations indicating a retry loop.
 - `boundBucketRequests`: a pseudo-synchronous array of BucketRequests currently bound to this Bucket.
@@ -267,10 +269,10 @@ spec:
 
 1. `labels`: should be added by controller.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
 1. `finalizers`: should be added by controller to defer `BucketAccessRequest` deletion until backend deletion ops succeed.
-1. `serviceAccountName`: the name of a Kubernetes SA in the same namespace.  This field is included to support cloud provider identity integration.  Should not be set when specifying `accessSecretName`.
+1. `serviceAccountName`: the name of a Kubernetes ServiceAccount in the same namespace.  This field is included to support cloud provider identity integration.  Should not be set when specifying `accessSecretName`.
 1. `accessSecretName`: used in minting credentials to specify the desired Secret name to contain them.  Created in the namespace of the `BucketAccessRequest`  Should not be set when specifying `serviceAccountName`.
-1. `bucket`: The the name of the bucket to which the user identity or SA should be granted access to, according to the policies defined in the `BucketAccessClass`.
-1. `bucketAccessClassName`: name of the `BucketAccessClass` specifying the desired set of policy actions to be set for a user identity or SA.
+1. `bucket`: The the name of the bucket to which the user identity or ServiceAccount should be granted access to, according to the policies defined in the `BucketAccessClass`.
+1. `bucketAccessClassName`: name of the `BucketAccessClass` specifying the desired set of policy actions to be set for a user identity or ServiceAccount.
 1. `bucketAccessName`: name of the bound cluster-scoped `BucketAccess` instance
 1. `protocol`: one of the desired protocols listed in the `BucketAccessClass.protocols` array.  A fast-failure should occur when the specified protocol does not match any supported by `BucketAccessClass`.
 
@@ -302,7 +304,7 @@ metadata:
 1. `finalizers`: should be added by controller to defer `BucketAccess` deletion until backend deletion ops succeed.
 1. `bucketAccessRequestName`/`bucketAccessRequestNamespace`: name and namespace of the bound `BucketAccessRequest`
 1. `protocol`: the protocol specified by the `BucketAccessRequest`
-1. `serviceAccountName`: name of the Kubernetes SA specified by the `BucketAccessRequest`.  Undefined when the `BucketAccessRequest.accessSecretName` is defined.
+1. `serviceAccountName`: name of the Kubernetes ServiceAccount specified by the `BucketAccessRequest`.  Undefined when the `BucketAccessRequest.accessSecretName` is defined.
 1. `keySecretName`: name of the *provisioner* generated `Secret` containing access credentials. This `Secret` exists in the provisioner’s namespace and must be copied to the app namespace by the COSI controller.
 1. `provisioner`:  name of the provisioner that should handle this `BucketAccess` instance.  Copied from the `BucketAccessClass`.
 1. `parameters`:  A map of string, string key values.  Allows admins to control user and access provisioning by setting provisioner key-values.
