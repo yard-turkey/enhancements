@@ -242,11 +242,11 @@ parameters: [7]
 
 ---
 
-Access policy and user identities are an integral part of most object stores.  As such, a system must be implemented to manage both user/credential creation and the binding of those users to individual buckets via policies.  Object stores are somewhat unique in how they manage users, with cloud providers typically integrating with an IAM platform.  This API includes support for cloud platform identity integration with Kubernetes ServiceAccounts.  On-prem solutions usually provide their own user management systems, which may look very different from each other and from IAM platforms.  As such, the Access API abstracts the location where these policies are set.  That is, it does not dictate that a policy be set on an IAM user or role, or as a policy on the storage instance itself.  Its purpose is strictly to define “who” may access “what,” and support an arbitrary list of what is allowed or denied.
+The Access APIs abstract the backend policy system.  Access policy and user identities are an integral part of most object stores.  As such, a system must be implemented to manage both user/credential creation and the binding of those users to individual buckets via policies.  Object stores differ from file and block storage in how they manage users, with cloud providers typically integrating with an IAM platform.  This API includes support for cloud platform identity integration with Kubernetes ServiceAccounts.  On-prem solutions usually provide their own user management systems, which may look very different from each other and from IAM platforms.  We must also account for third party authentication solutions that may be integrated with an on-prem service.
 
 #### BucketAccessRequest
 
-A user facing API representing an object store user and an access policy between the user and a storage instance.  A user will create a BucketAccessRequest in the app namespace, which will result in a secret being written to the app namespace containing access credentials for a given object store.  A BucketAccessRequest can specify *either* a ServiceAccount in the same namespace or a desired Secret name.  Specifying a ServiceAccount enables provisioners to support cloud provider identity integration with their respective Kubernetes cluster offerings.
+A user facing API representing an object store user and an access policy defining the user’s relation to a storage instance.  A user will create a BucketAccessRequest in the app namespace.  A BucketAccessRequest can specify *either* a ServiceAccount in the same namespace or a desired Secret name.  Specifying a ServiceAccount enables provisioners to support cloud provider identity integration with their respective Kubernetes cluster offerings.
 
 ```yaml
 apiVersion: cosi.io/v1alpha1
@@ -263,8 +263,7 @@ spec:
   accessSecretName: [4]
   bucket: [5] 
   bucketAccessClassName: [6]
-  bucketAccessName: [7]
-  protocol: [8]
+  bucketAccessRequestName: [7]
 ```
 
 1. `labels`: should be added by controller.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
@@ -274,7 +273,6 @@ spec:
 1. `bucket`: The the name of the bucket to which the user identity or ServiceAccount should be granted access to, according to the policies defined in the `BucketAccessClass`.
 1. `bucketAccessClassName`: name of the `BucketAccessClass` specifying the desired set of policy actions to be set for a user identity or ServiceAccount.
 1. `bucketAccessName`: name of the bound cluster-scoped `BucketAccess` instance
-1. `protocol`: one of the desired protocols listed in the `BucketAccessClass.protocols` array.  A fast-failure should occur when the specified protocol does not match any supported by `BucketAccessClass`.
 
 #### BucketAccess
 
@@ -291,8 +289,7 @@ metadata:
   - cosi.io/finalizer [3]
  spec:
   bucketAccessRequestName: [4]
-  bucketAccessRequestNamespace: [4]
-  protocol: [5]
+  bucketAccessRequestNamespace: [5]
   serviceAccountName: [6]
   keySecretName: [7]
   provisioner: [8]
@@ -303,7 +300,6 @@ metadata:
 1. `labels`: should be added by controller.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
 1. `finalizers`: should be added by controller to defer `BucketAccess` deletion until backend deletion ops succeed.
 1. `bucketAccessRequestName`/`bucketAccessRequestNamespace`: name and namespace of the bound `BucketAccessRequest`
-1. `protocol`: the protocol specified by the `BucketAccessRequest`
 1. `serviceAccountName`: name of the Kubernetes ServiceAccount specified by the `BucketAccessRequest`.  Undefined when the `BucketAccessRequest.accessSecretName` is defined.
 1. `keySecretName`: name of the *provisioner* generated `Secret` containing access credentials. This `Secret` exists in the provisioner’s namespace and must be copied to the app namespace by the COSI controller.
 1. `provisioner`:  name of the provisioner that should handle this `BucketAccess` instance.  Copied from the `BucketAccessClass`.
@@ -320,7 +316,7 @@ metadata:
   name:
 provisioner: [1]
 supportedProtocols: [2]
-accessPolicy: [3]
+policyActions: [3]
   allow:
   - "*"
   deny:
@@ -330,7 +326,7 @@ parameters: [4]
 
 1. `provisioner`: The name of the provisioner that `BucketAccess` instances should be managed by.
 1. `supportedProtocols`: protocols the associated object store supports.  Applied when matching Bucket to BucketClasses.  Admins may specify more than protocol when necessary.  `BucketAccessRequests.spec.protocol` will be checked against this array prior to provisioning.
-1. `accessPolicy`: a set of provisioner/platform defined policy actions to allow or deny a given user identity.
+1. policyActions: a set of provisioner/platform defined policy actions to allow or deny a given user identity.
 1. `parameters`:   (Optional)  A map of string, string key values.  Allows admins to control user and access provisioning by setting provisioner key-values.
 
 ## Architecture
