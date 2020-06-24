@@ -329,14 +329,6 @@ parameters: [4]
 1. policyActions: a set of provisioner/platform defined policy actions to allow or deny a given user identity.
 1. `parameters`:   (Optional)  A map of string, string key values.  Allows admins to control user and access provisioning by setting provisioner key-values.
 
-### API Relationships
-
-The diagram below illustrates the connections between the proposed CRDs, Kubernetes APIs, and the actual storage and identity instances.  These connections exist as fields within an API whose value is a reference to another API instance.  This reference value must contain the targeted API instance’s name, namespace, and uuid.
-
-> Note: Controllers are omitted for simplicity.
-
-![](./bucket-api-diagrams-API-relationships.png)
-
 
 
 ---
