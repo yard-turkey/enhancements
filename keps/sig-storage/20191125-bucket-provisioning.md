@@ -37,13 +37,7 @@ status: provisional
       - [BucketAccessRequest](#bucketaccessrequest)
       - [BucketAccess](#bucketaccess)
       - [BucketAccessClass](#bucketaccessclass)
-  - [Architecture](#architecture)
-    - [API Relationships](#api-relationships)
-    - [Controller Architecture](#controller-architecture)
-    - [Greenfield](#greenfield)
-      - [Sharing Dynamically Created Buckets](#sharing-dynamically-created-buckets)
-    - [Brownfield](#brownfield)
-    - [Provisioner Secrets](#provisioner-secrets)
+  - [Provisioner Secrets](#provisioner-secrets)
 <!-- /toc -->
 
 # Summary
