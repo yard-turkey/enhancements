@@ -1,5 +1,5 @@
 ---
-title: Object Bucket Provisioning
+mmrrtitle: Object Bucket Provisioning
 authors:
   - "@jeffvance"
   - "@copejon"
@@ -37,7 +37,13 @@ status: provisional
       - [BucketAccessRequest](#bucketaccessrequest)
       - [BucketAccess](#bucketaccess)
       - [BucketAccessClass](#bucketaccessclass)
-  - [Provisioner Secrets](#provisioner-secrets)
+  - [Architecture](#architecture)
+    - [API Relationships](#api-relationships)
+    - [Controller Architecture](#controller-architecture)
+    - [Greenfield](#greenfield)
+      - [Sharing Dynamically Created Buckets](#sharing-dynamically-created-buckets)
+    - [Brownfield](#brownfield)
+    - [Provisioner Secrets](#provisioner-secrets)
 <!-- /toc -->
 
 # Summary
@@ -118,7 +124,7 @@ spec:
   bucketPrefix: [4]
   bucketClassName: [5]
   secretName: [6]
-  bucket: [7]
+  bucketName: [7]
 status:
   phase: [9]
   conditions: 
@@ -130,7 +136,7 @@ status:
 1. `bucketPrefix`: (Optional) prefix prepended to a randomly generated bucket name, eg. “yosemite-photos-". If empty no prefix is prepended.
 1. `bucketClassName`: Name of the target BucketClass.
 1. `secretName`: (optional) Secret in the BucketRequest's namespace storing credentials to be used by a workload for bucket access.
-1. `bucket`: Name of the Bucket instance representing the desired storage instance endpoint.  Set by the COSI Controller for new Buckets.  Specified by the user when connecting to existing buckets.
+1. `bucketName`: Name of the Bucket instance representing the desired storage instance endpoint.  Set by the COSI Controller for new Buckets.  Specified by the user when connecting to existing buckets.
 1. `phase`: 
    - *Pending*: The controller has detected the new `Bucket` and begun provisioning operations
    - *Bound*: Provisioning operations have completed and the `Bucket` has been bound to a `Bucket`.
@@ -151,7 +157,7 @@ Metadata:
 spec:
   provisioner: [4]
   releasePolicy: [5]
-  anonymousAccessMode: [6]
+	anonymousAccessMode: [6]
   bucketClassName: [7]
   permittedNamespaces: [8]
     - name:
@@ -175,10 +181,6 @@ spec:
 status:
   message: [14]
   phase: [15]
-  boundBucketRequests: [16]
-  - name:
-    namespace:
-    uuid:
   conditions:
 ```
 
@@ -189,9 +191,15 @@ status:
 1. `releasePolicy`: Prescribes outcome of a Delete events. **Note:** In Brownfield cases, backing storage instance is Retained, and never deleted.
    - _Delete_:  the bucket and its contents are destroyed.
    - _Retain_:  the bucket and its data are preserved with only abstracting Kubernetes being destroyed.
-1. `anonymousAccessMode`: Declares the level of access given to credentials provisioned through this class.  If empty, drivers may set defaults.
+1. `anonymousAccessMode`:  ACL specifying *uncredentialed* access to the Bucket.  This is applicable for cases where the storage instance or objects are intended to be publicly readable and/or writable.  If `BucketClass.anonymousAccessMode` is set, the value is copied here.  Accepted values:
+   - `private`: Default, disallow uncredentialed access to the storage instance.
+   - `ro`: Read only, uncredentialed users are permitted *read* operations for objects within the storage instance.
+   - `rw`: Read/Write, uncredentialed users are permitted *read and write* operations for objects within the storage instance. 
+   - `wo`: Write, uncredentialed users are permitted *write* operations for objects within the storage instance. 
 1. `bucketClassName`: Name of the associated BucketClass.
-1. permittedNamespaces: An array of namespaces, identified by a name and uuid, from which  BucketRequests can bind to a Bucket (primarily applicable in Brownfield).  Provided to allow admins a layer of cluster-layer access control.  Does **not** reflect or alter the backing storage instances' ACLs or IAM policies.
+1. `permittedNamespaces`: An array of namespaces, identified by a name and uuid, from which  BucketRequests are allowed to bind to the Bucket.  Provided to allow admins a layer of cluster-layer access control.  Does **not** reflect or alter the backing storage instances' ACLs or IAM policies.
+   - In Greenfield, the originating BuckerRequest’s namespace must be specified at time of Bucket generation.
+   - In Brownfield, this list is defined by the admin.
 1. `protocol`: The protocol the application will use to access the storage instance.
    - `type`: Specifies the protocol targeted by this Bucket instance.  One of:
      - `azureBlob`: data required to target a provisioned azure container and/or storage account.
@@ -204,7 +212,6 @@ status:
    - _Released_: the Bucket has been deleted, signalling that the Bucket is ready for garbage collection.
    - _Failed_: error and all retries have been exhausted.
    - _Retrying_: set when a driver or Kubernetes error is encountered during provisioning operations indicating a retry loop.
-- `boundBucketRequests`: a pseudo-synchronous array of BucketRequests currently bound to this Bucket.
 
 #### BucketClass
 
@@ -218,7 +225,10 @@ metadata:
 provisioner: [1]
 isDefaultBucketClass: [2]
 supportedProtocols: {"azureblob", "gcs", "s3", ... } [3]
-accessMode: {"ro", "wo", "rw"} [4]
+anonymousAccessMode: {"ro", "wo", "rw"} [4]
+additionalPermittedNamespaces: [5]
+- name:
+  uuid: 
 releasePolicy: {"Delete", "Retain"} [6]
 parameters: [7]
 ```
@@ -226,7 +236,8 @@ parameters: [7]
 1. `provisioner`: The name of the driver. If supplied the driver container and sidecar container are expected to be deployed. If omitted the `secretRef` is required for static provisioning.
 1. `isDefaultBucketClass`: boolean. When true, signals that the controller should attempt to match `Bucket`’s without a defined `BucketClass` to this class, accounting for the `Bucket`’s requested protocol.  Multiple default classes for the same protocol will produce undefined behaviour.
 1. `supportedProtocols`: protocols the associated object store supports.  Applied when matching Bucket to BucketClasses. Admins may specify all protocols a provisioner supports.  `Bucket.spec.protocol` will be checked against the array prior to provisioning.
-1. `accessMode`: (Optional) ACL setting specifying the default accessibility of .
+1. `anonymousAccessMode`: (Optional) ACL specifying *uncredentialed* access to the Bucket.  This is applicable for cases where the storage instance or objects are intended to be publicly readable and/or writable.
+1. `additionalPermittedNamespaces`: A list of namespace *in addition to the originating namespace* that will be allowed access to this Bucket.  A nil and empty string value are equivalent and must not append any namespace to `Bucket.spec.permittedNamespaces` list.
 1. `releasePolicy`: Prescribes outcome of a Delete events. **Note:** In Brownfield and Static cases, *Retain* is mandated. 
    - `Delete`:  the bucket and its contents are destroyed
    - `Retain`:  the bucket and its data are preserved with only abstracting Kubernetes being destroyed
@@ -407,7 +418,3 @@ cosi.io/provisioner-secret-namespace:
   cosi.io/provisioner-secret-name: "${bucket.name}"
   cosi.io/provisioner-secret-namespace: "${bucket.namespace}"
   ```
-
-
-
-1. 
