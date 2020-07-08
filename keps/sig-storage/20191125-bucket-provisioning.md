@@ -1,5 +1,5 @@
 ---
-mmrrtitle: Object Bucket Provisioning
+title: Object Bucket Provisioning
 authors:
   - "@jeffvance"
   - "@copejon"
@@ -157,13 +157,16 @@ Metadata:
 spec:
   provisioner: [4]
   releasePolicy: [5]
-	anonymousAccessMode: [6]
+  anonymousAccessMode: [6]
+    - private
+    - publicRead
+    - publicReadWrite
   bucketClassName: [7]
   permittedNamespaces: [8]
     - name:
-      uuid:
+      uid:
   protocol: [9]
-    type: ""
+    protocolSignature: ""
     azureBlob: [10]
       containerName:
       storageAccount:
@@ -197,11 +200,11 @@ status:
    - `rw`: Read/Write, uncredentialed users are permitted *read and write* operations for objects within the storage instance. 
    - `wo`: Write, uncredentialed users are permitted *write* operations for objects within the storage instance. 
 1. `bucketClassName`: Name of the associated BucketClass.
-1. `permittedNamespaces`: An array of namespaces, identified by a name and uuid, from which  BucketRequests are allowed to bind to the Bucket.  Provided to allow admins a layer of cluster-layer access control.  Does **not** reflect or alter the backing storage instances' ACLs or IAM policies.
+1. `permittedNamespaces`: An array of namespaces, identified by a name and uid, from which  BucketRequests are allowed to bind to the Bucket.  Provided to allow admins a layer of cluster-layer access control.  Does **not** reflect or alter the backing storage instances' ACLs or IAM policies.
    - In Greenfield, the originating BuckerRequest’s namespace must be specified at time of Bucket generation.
    - In Brownfield, this list is defined by the admin.
 1. `protocol`: The protocol the application will use to access the storage instance.
-   - `type`: Specifies the protocol targeted by this Bucket instance.  One of:
+   - `protocolSignature`: Specifies the protocol targeted by this Bucket instance.  One of:
      - `azureBlob`: data required to target a provisioned azure container and/or storage account.
      - `s3`: data required to target a provisioned S3 bucket and/or user.
      - `gcs`: data required to target a provisioned GCS bucket and/or service account.
@@ -228,7 +231,7 @@ supportedProtocols: {"azureblob", "gcs", "s3", ... } [3]
 anonymousAccessMode: {"ro", "wo", "rw"} [4]
 additionalPermittedNamespaces: [5]
 - name:
-  uuid: 
+  uid: 
 releasePolicy: {"Delete", "Retain"} [6]
 parameters: [7]
 ```
@@ -266,9 +269,12 @@ metadata:
 spec:
   serviceAccountName: [3]
   accessSecretName: [4]
-  bucket: [5] 
+  bucketRequest: [5] 
   bucketAccessClassName: [6]
-  bucketAccessRequestName: [7]
+  bucketAccessName: [7]
+status:
+  message: [14]
+  phase: [15]
 ```
 
 1. `labels`: should be added by controller.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
@@ -299,6 +305,9 @@ metadata:
   keySecretName: [7]
   provisioner: [8]
   parameters: [9]
+ status:
+  message: [14]
+  phase: [15]
 ```
 
 1. `name`: For Greenfield, generated in the pattern of `bucketAccessRequest-<my-bucketAccessRequest>-<my-bucketAccessRequest-namespace>`. 
@@ -351,11 +360,9 @@ parameters: [4]
 In an automated system where bucket lifecycles are managed by a controller:
 
 1. A BucketClass is defined to enable the provisioning of object store storage, with a specified configuration.
-
+2. 
 2. A user will define a [Bucket](#bucket) with the [BucketClass](#bucketclass) specified.  
-
-3. A [Bucket](#Bucket) is instantiated and encapsulates all configuration information from the BucketClass and Bucket.  The Bucket will store all necessary information about the provisioned storage instance, including connection data.  Credentials and other sensitive information should not be stored in a Bucket.  
-
+3. A [Bucket](#Bucket) is instantiated and encapsulates all configuration information from the BucketClass and Bucket.  The Bucket will store all necessary information about the provisioned storage instance, including connection data.  Credentials and other sensitive information should not be stored in a Bucket. 
 4. A driver will then provision the object storage and return the connection information, to be written to the Bucket.
 
 
