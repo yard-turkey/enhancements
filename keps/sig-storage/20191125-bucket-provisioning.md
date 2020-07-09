@@ -211,8 +211,8 @@ status:
 1. `parameters`: a copy of the BucketClass parameters.
 1. `message`: a human readable description detailing the reason for the current `phase``.
 1. `phase`: is the current state of the Bucket:
-   - _Bound_: the controller finished processing the request and bound the Bucket and Bucket.
-   - _Released_: the Bucket has been deleted, signalling that the Bucket is ready for garbage collection.
+   - _Ready_: the controller finished processing and the controller is ready to receive access requests.
+   - _Released_: the originating Bucket has been deleted, signalling that the Bucket is ready for garbage collection.  This will occur on Greenfield Buckets once all requests referencing the Bucket are deleted.
    - _Failed_: error and all retries have been exhausted.
    - _Retrying_: set when a driver or Kubernetes error is encountered during provisioning operations indicating a retry loop.
 
@@ -268,22 +268,25 @@ metadata:
   - cosi.io/finalizer [2]
 spec:
   serviceAccountName: [3]
-  accessSecretName: [4]
-  bucketRequest: [5] 
-  bucketAccessClassName: [6]
-  bucketAccessName: [7]
+  bucketRequest: [4] 
+  bucketAccessClassName: [5]
+  bucketAccessName: [6]
 status:
-  message: [14]
-  phase: [15]
+  message: [7]
+  phase: [8]
 ```
 
 1. `labels`: should be added by controller.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
 1. `finalizers`: should be added by controller to defer `BucketAccessRequest` deletion until backend deletion ops succeed.
 1. `serviceAccountName`: the name of a Kubernetes ServiceAccount in the same namespace.  This field is included to support cloud provider identity integration.  Should not be set when specifying `accessSecretName`.
-1. `accessSecretName`: used in minting credentials to specify the desired Secret name to contain them.  Created in the namespace of the `BucketAccessRequest`  Should not be set when specifying `serviceAccountName`.
 1. `bucket`: The the name of the bucket to which the user identity or ServiceAccount should be granted access to, according to the policies defined in the `BucketAccessClass`.
 1. `bucketAccessClassName`: name of the `BucketAccessClass` specifying the desired set of policy actions to be set for a user identity or ServiceAccount.
 1. `bucketAccessName`: name of the bound cluster-scoped `BucketAccess` instance
+1. `message`: a human readable description detailing the reason for the current `phase``.
+1. `phase`: is the current state of the Bucket:
+   - _Bound_: the controller finished processing and has bound the BucketAccess to the BucketRequest via the BucketRequest.Spec.BucketAccessRequestName and BucketRequest.Spec.BucketAccessRequestNamespace
+   - _Failed_: error and all retries have been exhausted.
+   - _Retrying_: set when a driver or Kubernetes error is encountered during provisioning operations indicating a retry loop.
 
 #### BucketAccess
 
@@ -300,14 +303,14 @@ metadata:
   - cosi.io/finalizer [3]
  spec:
   bucketAccessRequestName: [4]
-  bucketAccessRequestNamespace: [5]
-  serviceAccountName: [6]
-  keySecretName: [7]
-  provisioner: [8]
-  parameters: [9]
+  bucketAccessRequestNamespace: [4]
+  serviceAccountName: [5]
+  accessSecretName: [6]
+  provisioner: [7]
+  parameters: [8]
  status:
-  message: [14]
-  phase: [15]
+  message: [9]
+  phase: [10]
 ```
 
 1. `name`: For Greenfield, generated in the pattern of `bucketAccessRequest-<my-bucketAccessRequest>-<my-bucketAccessRequest-namespace>`. 
@@ -315,9 +318,15 @@ metadata:
 1. `finalizers`: should be added by controller to defer `BucketAccess` deletion until backend deletion ops succeed.
 1. `bucketAccessRequestName`/`bucketAccessRequestNamespace`: name and namespace of the bound `BucketAccessRequest`
 1. `serviceAccountName`: name of the Kubernetes ServiceAccount specified by the `BucketAccessRequest`.  Undefined when the `BucketAccessRequest.accessSecretName` is defined.
-1. `keySecretName`: name of the *provisioner* generated `Secret` containing access credentials. This `Secret` exists in the provisioner’s namespace and must be copied to the app namespace by the COSI controller.
+1. `  accessSecretName`: name of the *provisioner* generated `Secret` containing access credentials. This `Secret` exists in the provisioner’s namespace and must be copied to the app namespace by the COSI controller.
 1. `provisioner`:  name of the provisioner that should handle this `BucketAccess` instance.  Copied from the `BucketAccessClass`.
 1. `parameters`:  A map of string, string key values.  Allows admins to control user and access provisioning by setting provisioner key-values.
+1. `message`: a human readable description detailing the reason for the current `phase``.
+1. `phase`: is the current state of the Bucket:
+   - _Bound_: the controller finished processing the request and has bound the BucketAccess to the BucketAccessRequest
+   - _Released_: the originating Bucket has been deleted, signalling that the Bucket is ready for garbage collection.  This will occur on Greenfield Buckets once all requests referencing the Bucket are deleted.
+   - _Failed_: error and all retries have been exhausted.
+   - _Retrying_: set when a driver or Kubernetes error is encountered during provisioning operations indicating a retry loop.
 
 #### BucketAccessClass
 
@@ -340,7 +349,7 @@ parameters: [4]
 
 1. `provisioner`: The name of the provisioner that `BucketAccess` instances should be managed by.
 1. `supportedProtocols`: protocols the associated object store supports.  Applied when matching Bucket to BucketClasses.  Admins may specify more than protocol when necessary.  `BucketAccessRequests.spec.protocol` will be checked against this array prior to provisioning.
-1. policyActions: a set of provisioner/platform defined policy actions to allow or deny a given user identity.
+1. `policyActions`: a set of provisioner/platform defined policy actions to allow or deny a given user identity.
 1. `parameters`:   (Optional)  A map of string, string key values.  Allows admins to control user and access provisioning by setting provisioner key-values.
 
 
@@ -360,7 +369,6 @@ parameters: [4]
 In an automated system where bucket lifecycles are managed by a controller:
 
 1. A BucketClass is defined to enable the provisioning of object store storage, with a specified configuration.
-2. 
 2. A user will define a [Bucket](#bucket) with the [BucketClass](#bucketclass) specified.  
 3. A [Bucket](#Bucket) is instantiated and encapsulates all configuration information from the BucketClass and Bucket.  The Bucket will store all necessary information about the provisioned storage instance, including connection data.  Credentials and other sensitive information should not be stored in a Bucket. 
 4. A driver will then provision the object storage and return the connection information, to be written to the Bucket.
