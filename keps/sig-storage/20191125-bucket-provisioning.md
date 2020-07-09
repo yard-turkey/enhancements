@@ -14,7 +14,7 @@ approvers:
   - TBD
 editor: TBD
 creation-date: 2019-11-25
-last-updated: 2020-04-28
+last-updated: 2020-07-08
 status: provisional
 ---
 
@@ -34,18 +34,15 @@ status: provisional
       - [User](#user)
   - [APIs](#apis)
     - [Storage APIs](#storage-apis)
+      - [BucketRequest](#bucketrequest)
+      - [Bucket](#bucket)
+      - [BucketClass](#bucketclass)
+    - [Access APIs](#access-apis)
       - [BucketAccessRequest](#bucketaccessrequest)
       - [BucketAccess](#bucketaccess)
       - [BucketAccessClass](#bucketaccessclass)
-  - [Architecture](#architecture)
-    - [API Relationships](#api-relationships)
-    - [Controller Architecture](#controller-architecture)
-    - [Greenfield](#greenfield)
-      - [Sharing Dynamically Created Buckets](#sharing-dynamically-created-buckets)
-    - [Brownfield](#brownfield)
-    - [Provisioner Secrets](#provisioner-secrets)
+  - [Provisioner Secrets](#provisioner-secrets)
 <!-- /toc -->
-
 # Summary
 
 This proposal introduces the *Container Object Storage Interface* (COSI), a system composed of Custom Resource Definitions (CRDs), a controller architecture, and a gRPC specification, for the purpose of standardizing object storage representations in Kubernetes.  Goals and non-goals set the scope for the proposal by defining higher level objectives.  The vocabulary section defines terminology.  User stories illustrate how these APIs may fulfill cluster user requirements.  Relationships between the APIs are provided to illustrate the interconnections between object storage APIs, users' workloads, and object store service instances.  Lastly, the documents states the proposed API specs for the Bucket, Bucket, and BucketClass objects.
@@ -101,8 +98,6 @@ This proposal does _not_ include a standardized *protocol* or abstraction of sto
 
 
 ### Storage APIs
-
----
 
 #### BucketRequest
 
@@ -247,8 +242,6 @@ parameters: [7]
 1. `parameters`:  (Optional)  A map of string, string key values.  Allows admins to control user and access provisioning by setting provisioner key-values.
 
 ### Access APIs
-
----
 
 The Access APIs abstract the backend policy system.  Access policy and user identities are an integral part of most object stores.  As such, a system must be implemented to manage both user/credential creation and the binding of those users to individual buckets via policies.  Object stores differ from file and block storage in how they manage users, with cloud providers typically integrating with an IAM platform.  This API includes support for cloud platform identity integration with Kubernetes ServiceAccounts.  On-prem solutions usually provide their own user management systems, which may look very different from each other and from IAM platforms.  We must also account for third party authentication solutions that may be integrated with an on-prem service.
 
