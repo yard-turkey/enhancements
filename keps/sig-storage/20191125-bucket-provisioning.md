@@ -1,5 +1,5 @@
 ---
-mmrrtitle: Object Bucket Provisioning
+title: Object Bucket Provisioning
 authors:
   - "@jeffvance"
   - "@copejon"
@@ -14,7 +14,7 @@ approvers:
   - TBD
 editor: TBD
 creation-date: 2019-11-25
-last-updated: 2020-04-28
+last-updated: 2020-07-08
 status: provisional
 ---
 
@@ -34,18 +34,15 @@ status: provisional
       - [User](#user)
   - [APIs](#apis)
     - [Storage APIs](#storage-apis)
+      - [BucketRequest](#bucketrequest)
+      - [Bucket](#bucket)
+      - [BucketClass](#bucketclass)
+    - [Access APIs](#access-apis)
       - [BucketAccessRequest](#bucketaccessrequest)
       - [BucketAccess](#bucketaccess)
       - [BucketAccessClass](#bucketaccessclass)
-  - [Architecture](#architecture)
-    - [API Relationships](#api-relationships)
-    - [Controller Architecture](#controller-architecture)
-    - [Greenfield](#greenfield)
-      - [Sharing Dynamically Created Buckets](#sharing-dynamically-created-buckets)
-    - [Brownfield](#brownfield)
-    - [Provisioner Secrets](#provisioner-secrets)
+  - [Provisioner Secrets](#provisioner-secrets)
 <!-- /toc -->
-
 # Summary
 
 This proposal introduces the *Container Object Storage Interface* (COSI), a system composed of Custom Resource Definitions (CRDs), a controller architecture, and a gRPC specification, for the purpose of standardizing object storage representations in Kubernetes.  Goals and non-goals set the scope for the proposal by defining higher level objectives.  The vocabulary section defines terminology.  User stories illustrate how these APIs may fulfill cluster user requirements.  Relationships between the APIs are provided to illustrate the interconnections between object storage APIs, users' workloads, and object store service instances.  Lastly, the documents states the proposed API specs for the Bucket, Bucket, and BucketClass objects.
@@ -102,8 +99,6 @@ This proposal does _not_ include a standardized *protocol* or abstraction of sto
 
 ### Storage APIs
 
----
-
 #### BucketRequest
 
 A namespaced API representing a workload’s need for a storage instance endpoint. Created in the workload's namespace.  A [BucketAccessRequest](#bucketaccessrequest) is required in order to gain credentialed access to the storage instance.
@@ -157,13 +152,16 @@ Metadata:
 spec:
   provisioner: [4]
   releasePolicy: [5]
-	anonymousAccessMode: [6]
+  anonymousAccessMode: [6]
+    - private
+    - publicRead
+    - publicReadWrite
   bucketClassName: [7]
   permittedNamespaces: [8]
     - name:
-      uuid:
+      uid:
   protocol: [9]
-    type: ""
+    protocolSignature: ""
     azureBlob: [10]
       containerName:
       storageAccount:
@@ -197,19 +195,19 @@ status:
    - `rw`: Read/Write, uncredentialed users are permitted *read and write* operations for objects within the storage instance. 
    - `wo`: Write, uncredentialed users are permitted *write* operations for objects within the storage instance. 
 1. `bucketClassName`: Name of the associated BucketClass.
-1. `permittedNamespaces`: An array of namespaces, identified by a name and uuid, from which  BucketRequests are allowed to bind to the Bucket.  Provided to allow admins a layer of cluster-layer access control.  Does **not** reflect or alter the backing storage instances' ACLs or IAM policies.
+1. `permittedNamespaces`: An array of namespaces, identified by a name and uid, from which  BucketRequests are allowed to bind to the Bucket.  Provided to allow admins a layer of cluster-layer access control.  Does **not** reflect or alter the backing storage instances' ACLs or IAM policies.
    - In Greenfield, the originating BuckerRequest’s namespace must be specified at time of Bucket generation.
    - In Brownfield, this list is defined by the admin.
 1. `protocol`: The protocol the application will use to access the storage instance.
-   - `type`: Specifies the protocol targeted by this Bucket instance.  One of:
+   - `protocolSignature`: Specifies the protocol targeted by this Bucket instance.  One of:
      - `azureBlob`: data required to target a provisioned azure container and/or storage account.
      - `s3`: data required to target a provisioned S3 bucket and/or user.
      - `gcs`: data required to target a provisioned GCS bucket and/or service account.
 1. `parameters`: a copy of the BucketClass parameters.
 1. `message`: a human readable description detailing the reason for the current `phase``.
 1. `phase`: is the current state of the Bucket:
-   - _Bound_: the controller finished processing the request and bound the Bucket and Bucket.
-   - _Released_: the Bucket has been deleted, signalling that the Bucket is ready for garbage collection.
+   - _Ready_: the controller finished processing and the controller is ready to receive access requests.
+   - _Released_: the originating Bucket has been deleted, signalling that the Bucket is ready for garbage collection.  This will occur on Greenfield Buckets once all requests referencing the Bucket are deleted.
    - _Failed_: error and all retries have been exhausted.
    - _Retrying_: set when a driver or Kubernetes error is encountered during provisioning operations indicating a retry loop.
 
@@ -228,7 +226,7 @@ supportedProtocols: {"azureblob", "gcs", "s3", ... } [3]
 anonymousAccessMode: {"ro", "wo", "rw"} [4]
 additionalPermittedNamespaces: [5]
 - name:
-  uuid: 
+  uid: 
 releasePolicy: {"Delete", "Retain"} [6]
 parameters: [7]
 ```
@@ -244,8 +242,6 @@ parameters: [7]
 1. `parameters`:  (Optional)  A map of string, string key values.  Allows admins to control user and access provisioning by setting provisioner key-values.
 
 ### Access APIs
-
----
 
 The Access APIs abstract the backend policy system.  Access policy and user identities are an integral part of most object stores.  As such, a system must be implemented to manage both user/credential creation and the binding of those users to individual buckets via policies.  Object stores differ from file and block storage in how they manage users, with cloud providers typically integrating with an IAM platform.  This API includes support for cloud platform identity integration with Kubernetes ServiceAccounts.  On-prem solutions usually provide their own user management systems, which may look very different from each other and from IAM platforms.  We must also account for third party authentication solutions that may be integrated with an on-prem service.
 
@@ -265,19 +261,25 @@ metadata:
   - cosi.io/finalizer [2]
 spec:
   serviceAccountName: [3]
-  accessSecretName: [4]
-  bucket: [5] 
-  bucketAccessClassName: [6]
-  bucketAccessRequestName: [7]
+  bucketRequest: [4] 
+  bucketAccessClassName: [5]
+  bucketAccessName: [6]
+status:
+  message: [7]
+  phase: [8]
 ```
 
 1. `labels`: should be added by controller.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
 1. `finalizers`: should be added by controller to defer `BucketAccessRequest` deletion until backend deletion ops succeed.
 1. `serviceAccountName`: the name of a Kubernetes ServiceAccount in the same namespace.  This field is included to support cloud provider identity integration.  Should not be set when specifying `accessSecretName`.
-1. `accessSecretName`: used in minting credentials to specify the desired Secret name to contain them.  Created in the namespace of the `BucketAccessRequest`  Should not be set when specifying `serviceAccountName`.
 1. `bucket`: The the name of the bucket to which the user identity or ServiceAccount should be granted access to, according to the policies defined in the `BucketAccessClass`.
 1. `bucketAccessClassName`: name of the `BucketAccessClass` specifying the desired set of policy actions to be set for a user identity or ServiceAccount.
 1. `bucketAccessName`: name of the bound cluster-scoped `BucketAccess` instance
+1. `message`: a human readable description detailing the reason for the current `phase``.
+1. `phase`: is the current state of the Bucket:
+   - _Bound_: the controller finished processing and has bound the BucketAccess to the BucketRequest via the BucketRequest.Spec.BucketAccessRequestName and BucketRequest.Spec.BucketAccessRequestNamespace
+   - _Failed_: error and all retries have been exhausted.
+   - _Retrying_: set when a driver or Kubernetes error is encountered during provisioning operations indicating a retry loop.
 
 #### BucketAccess
 
@@ -294,11 +296,14 @@ metadata:
   - cosi.io/finalizer [3]
  spec:
   bucketAccessRequestName: [4]
-  bucketAccessRequestNamespace: [5]
-  serviceAccountName: [6]
-  keySecretName: [7]
-  provisioner: [8]
-  parameters: [9]
+  bucketAccessRequestNamespace: [4]
+  serviceAccountName: [5]
+  accessSecretName: [6]
+  provisioner: [7]
+  parameters: [8]
+ status:
+  message: [9]
+  phase: [10]
 ```
 
 1. `name`: For Greenfield, generated in the pattern of `bucketAccessRequest-<my-bucketAccessRequest>-<my-bucketAccessRequest-namespace>`. 
@@ -306,9 +311,15 @@ metadata:
 1. `finalizers`: should be added by controller to defer `BucketAccess` deletion until backend deletion ops succeed.
 1. `bucketAccessRequestName`/`bucketAccessRequestNamespace`: name and namespace of the bound `BucketAccessRequest`
 1. `serviceAccountName`: name of the Kubernetes ServiceAccount specified by the `BucketAccessRequest`.  Undefined when the `BucketAccessRequest.accessSecretName` is defined.
-1. `keySecretName`: name of the *provisioner* generated `Secret` containing access credentials. This `Secret` exists in the provisioner’s namespace and must be copied to the app namespace by the COSI controller.
+1. `  accessSecretName`: name of the *provisioner* generated `Secret` containing access credentials. This `Secret` exists in the provisioner’s namespace and must be copied to the app namespace by the COSI controller.
 1. `provisioner`:  name of the provisioner that should handle this `BucketAccess` instance.  Copied from the `BucketAccessClass`.
 1. `parameters`:  A map of string, string key values.  Allows admins to control user and access provisioning by setting provisioner key-values.
+1. `message`: a human readable description detailing the reason for the current `phase``.
+1. `phase`: is the current state of the Bucket:
+   - _Bound_: the controller finished processing the request and has bound the BucketAccess to the BucketAccessRequest
+   - _Released_: the originating Bucket has been deleted, signalling that the Bucket is ready for garbage collection.  This will occur on Greenfield Buckets once all requests referencing the Bucket are deleted.
+   - _Failed_: error and all retries have been exhausted.
+   - _Retrying_: set when a driver or Kubernetes error is encountered during provisioning operations indicating a retry loop.
 
 #### BucketAccessClass
 
@@ -331,7 +342,7 @@ parameters: [4]
 
 1. `provisioner`: The name of the provisioner that `BucketAccess` instances should be managed by.
 1. `supportedProtocols`: protocols the associated object store supports.  Applied when matching Bucket to BucketClasses.  Admins may specify more than protocol when necessary.  `BucketAccessRequests.spec.protocol` will be checked against this array prior to provisioning.
-1. policyActions: a set of provisioner/platform defined policy actions to allow or deny a given user identity.
+1. `policyActions`: a set of provisioner/platform defined policy actions to allow or deny a given user identity.
 1. `parameters`:   (Optional)  A map of string, string key values.  Allows admins to control user and access provisioning by setting provisioner key-values.
 
 
@@ -351,11 +362,8 @@ parameters: [4]
 In an automated system where bucket lifecycles are managed by a controller:
 
 1. A BucketClass is defined to enable the provisioning of object store storage, with a specified configuration.
-
 2. A user will define a [Bucket](#bucket) with the [BucketClass](#bucketclass) specified.  
-
-3. A [Bucket](#Bucket) is instantiated and encapsulates all configuration information from the BucketClass and Bucket.  The Bucket will store all necessary information about the provisioned storage instance, including connection data.  Credentials and other sensitive information should not be stored in a Bucket.  
-
+3. A [Bucket](#Bucket) is instantiated and encapsulates all configuration information from the BucketClass and Bucket.  The Bucket will store all necessary information about the provisioned storage instance, including connection data.  Credentials and other sensitive information should not be stored in a Bucket. 
 4. A driver will then provision the object storage and return the connection information, to be written to the Bucket.
 
 
