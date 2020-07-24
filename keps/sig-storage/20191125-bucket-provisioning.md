@@ -88,7 +88,7 @@ This proposal does _not_ include a standardized *protocol* or abstraction of sto
 + _greenfield bucket_ - a new bucket created by automation.
 + _object_ - an atomic, immutable unit of data stored in buckets.
 + _provisioner_ - a generic term meant to describe the combination of a sidecar and driver. "Provisioning" a bucket can mean creating a new bucket or granting access to an existing bucket.
-+ _sidecar - a Kubernetes-aware container (usually paired with a driver) that is reponsible for fullfilling COSI requests with the driver via gRPC calls. The sidecar's access can be restricted to the namespace where it resides, which is expected to be the same namespace as the provisioner. The COSI sidecar is provided by the Kubernetes community.
++ _sidecar_ - a Kubernetes-aware container (usually paired with a driver) that is reponsible for fullfilling COSI requests with the driver via gRPC calls. The sidecar's access can be restricted to the namespace where it resides, which is expected to be the same namespace as the provisioner. The COSI sidecar is provided by the Kubernetes community.
 + _storage instance_ - refers to the back object storage endpoint being abstracted by the Bucket API (a.k.a “bucket” or “container”).
 + _driverless_ - a system where no driver is deployed to automate object store operations.  COSI automation may still be deployed to managed COSI APIs. **Note:** the current state of the KEP does not justify nor define driverless aka "static provisioning". If the community feels this is an MVP requirement we will need to flush this out.
 
@@ -155,7 +155,7 @@ status:
 
 A cluster-scoped custom resource representing the abstraction of a single object store bucket. At a minimum, a `Bucket` instance stores enough identifying information so that drivers can accurately target the storage instance (e.g. during a deletion process).  For greenfield `Bucket`s all of the associated bucket classes fields are copied to the `Bucket`. Additionally, endpoint data returned by the driver is copied to the `Bucket` by the sidecar.
 
-There is a 1-to-many relationship between a `Bucket` and a `BucketRequest`, meaning that many `BucketRequest`s can reference the same `Bucket`. `Bucket` labels reflects this structure. **Note:** since cluster-scoped objects cannot define `ownerReferences`, COSI uses labels for a similar purpose.
+There is a 1-to-many relationship between a `Bucket` and a `BucketRequest`, meaning that many `BucketRequest`s can reference the same `Bucket`.
 
 For greenfield, COSI creates the `Bucket` based on values in the `BucketRequest` and `BucketClass`. For brownfield, an admin manually creates the `Bucket` and COSI takes care of binding and populating fields returned by the provisioner.
 
@@ -176,40 +176,44 @@ spec:
     - publicRead
     - publicReadWrite
   bucketClassName: [7]
-  permittedNamespaces: [8]
+  bindings: [8]
+    - <BucketAccess.name>":"<BucketRequest.namespace>"/"<BR.name>
+    - <BA.name>":"<BR.namespace>"/"<BR.name>
+  permittedNamespaces: [9]
     - name:
       uid:
-  protocol: [9]
+  protocol: [10]
     protocolSignature: ""
-    azureBlob: [10]
+    azureBlob: [11]
       containerName:
       storageAccount:
-    s3: [11]
+    s3: [12]
       endpoint:
       bucketName:
       region:
       signatureVersion:
-    gcs: [12]
+    gcs: [13]
       bucketName:
       privateKeyName:
       projectId:
       serviceAccount:
-  parameters: [13]
+  parameters: [14]
 status:
-  message: [14]
-  phase: [15]
+  message: [15]
+  phase: [16]
   conditions:
 ```
 
 1. `name`: When created by COSI, the `Bucket` name is generated in this format: _"bucket-"<bucketRequest.name>"-"<bucketRequest.namespace>_. If an admin creates a `Bucket`, as is necessary for brownfield access, they can use any name.
-1. `labels`: added by the controller. There are two kinds of labels added by COSI: 1) "cosi.io/provisioner" as the key and the provisioner's name as the value, 2) "cosi.io/boundTo" as the key and the name of the `BucketAccess` instance as the value. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
+1. `labels`: added by the controller.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
 1. `finalizers`: added by the controller to defer `Bucket` deletion until backend deletion ops succeed.
 1. `provisioner`: The provisioner field as defined in the `BucketClass`.  Used by sidecars to filter `Bucket`s. Format: <provisioner-namespace>"/"<provisioner-name>, eg "ceph-rgw-provisoning/ceph-rgw.cosi.ceph.com".
-1. `releasePolicy`: Prescribes outcome of a Delete events. **Note:** In brownfield, the `Bucket`'s release policy is always set to "Retain", and thus the backing storage instance is never deleted.
-   - _Delete_:  the bucket and its contents are destroyed. Available only in greenfield.
-   - _Retain_:  the `Bucket` and its data are preserved. The `Bucket` can potentially be reused.
+1. `releasePolicy`: Prescribes outcome of a Delete events. 
+   - _Retain_: (default) the `Bucket` and its data are preserved. The `Bucket` can potentially be reused.
+   - _Delete_: the bucket and its contents are destroyed.
 
-> Note: in brownfield, the `Bucket`'s release policy is always set to "Retain", and thus the backing storage instance is never deleted. A `Bucket` is not deleted if it is bound to any `BucketRequest`s, meaning a binding label exists.
+> Note: the `Bucket`'s release policy is set to "Retain" as a default. Exercise caution when using the "Delete" release policy as the bucket content will be deleted.
+> Note: a `Bucket` is not deleted if it is bound to any `BucketRequest`s.
 
 1. `anonymousAccessMode`:  ACL specifying *uncredentialed* access to the Bucket.  This is applicable to cases where the storage instance or objects are intended to be publicly readable and/or writable.  Accepted values:
    - `private`: Default, disallow uncredentialed access to the storage instance.
@@ -217,6 +221,7 @@ status:
    - `rw`: Read/Write, same as `ro` with the addition of PutObject being allowed.
    - `wo`: Write only, uncredentialed users can only call PutObject.
 1. `bucketClassName`: Name of the associated bucket class (greenfield only).
+1. `bindings`: an array of bindings between a `BucketAccess` instance and a `BucketRequest`. If the list is empty then there are no bindings (accessors) of this `Bucket` instance. The array format is: "<BucketAccess.name':'<BucketRequest.namespace>'/'<BucketRequest.name>"
 1. `permittedNamespaces`: An array of namespaces, identified by a name and uid, defining from which namespace a `BucketRequest`s is allowed to bind to a `Bucket`. For greenfield this list is copied from the `BucketClass` with the `BucketRequest`'s namespace added. For brownfield, this is an arbitrary list defined by the admin.
 
 > Note: does not reflect or alter the backing storage instances' ACLs or IAM policies.
@@ -248,7 +253,7 @@ metadata:
   name: 
 provisioner: [1]
 isDefaultBucketClass: [2]
-supportedProtocols: {"azureblob", "gcs", "s3", ... } [3]
+protocol: {"azureblob", "gcs", "s3", ... } [3]
 anonymousAccessMode: {"ro", "wo", "rw"} [4]
 additionalPermittedNamespaces: [5]
 - name:
@@ -257,15 +262,21 @@ releasePolicy: {"Delete", "Retain"} [6]
 parameters: [7]
 ```
 
-1. `provisioner`: (required) the name of the driver. If supplied the driver container and sidecar container are expected to be deployed. Format: <provisioner-namespace>"/"<provisioner-name>, eg "ceph-rgw-provisoning/ceph-rgw.cosi.ceph.com".
-1. `isDefaultBucketClass`: (optional) boolean, default is false. If set to true then potentially a `BucketRequest` does not need to specify a `BucketClass`. If the greenfield `BucketRequest` omits the `BucketClass` and a default `BucketClass`'s supported protocol matches the `BucketRequest`'s protocol then the default bucket class is used. **Note:** there can only be one supported protocol for default bucket classes.
-1. `supportedProtocols`: (required) protocol(s) supported by the associated object store. This field serves two purposes: 1) recognition that some object store support more than one protocol, 2) validation that the `BucketRequest`'s desired protocol is supported.  **Note:** default bucket classes can define only one supported protocol.
+1. `provisioner`: the name of the driver. If supplied the driver container and sidecar container are expected to be deployed. Format: <provisioner-namespace>"/"<provisioner-name>, eg "ceph-rgw-provisoning/ceph-rgw.cosi.ceph.com".
+1. `isDefaultBucketClass`: (optional) boolean, default is false. If set to true then potentially a `BucketRequest` does not need to specify a `BucketClass`. If the greenfield `BucketRequest` omits the `BucketClass` and a default `BucketClass`'s protocol matches the `BucketRequest`'s protocol then the default bucket class is used.
+1. `protocol`: (required) protocol supported by the associated object store. This field validates that the `BucketRequest`'s desired protocol is supported.
+
+> Note: if an object store supports more than one protocol then the admin should create a `BucketClass` per protocol.
+
 1. `anonymousAccessMode`: (optional) ACL specifying *uncredentialed* access to the Bucket.  This is applicable for cases where the storage instance or objects are intended to be publicly readable and/or writable.
 1. `additionalPermittedNamespaces`: (optional) a list of namespaces *in addition to the originating namespace* that will be allowed access to the `Bucket`.
-1. `releasePolicy`: (required) defines bucket retention for greenfield `BucketRequest` deletes. **Note:** In brownfield "Retain" is mandated. 
-   - `Delete`:  the bucket and its contents are destroyed.
-   - `Retain`:  the bucket and its data are preserved with only abstracting Kubernetes being destroyed.
+1. `releasePolicy`: defines bucket retention for greenfield `BucketRequest` deletes. **
+   - _Retain_: (default) the `Bucket` and its data are preserved. The `Bucket` can potentially be reused.
+   - _Delete_: the bucket and its contents are destroyed.
 1. `parameters`: (optional) a map of string:string key values.  Allows admins to set provisioner key-values.  **Note:** see [Provisioner Secrets](#provisioner-secrets) for some predefined `parameters` settings.
+
+> Note: the `Bucket`'s release policy is set to "Retain" as a default. Exercise caution when using the "Delete" release policy as the bucket content will be deleted.
+> Note: a `Bucket` is not deleted if it is bound to any `BucketRequest`s.
 
 ### Access APIs
 
@@ -359,7 +370,7 @@ kind: BucketAccessClass
 metadata: 
   name:
 provisioner: [1]
-supportedProtocols: [2]
+protocol: [2]
 policyActions: [3]
   allow:
   - "*"
@@ -369,7 +380,7 @@ parameters: [4]
 ```
 
 1. `provisioner`: (required) the name of the driver that `BucketAccess` instances should be managed by. Format: <provisioner-namespace>"/"<provisioner-name>, eg "ceph-rgw-provisoning/ceph-rgw.cosi.ceph.com".
-1. `supportedProtocols`: protocols the associated object store supports.  Applied when matching Bucket to BucketClasses.  Admins may specify more than protocol when necessary.  `BucketAccessRequests.spec.protocol` will be checked against this array prior to provisioning.
+1. `protocol`: protocol supported by the associated object store.  Applied when matching Bucket to BucketClasses. `BucketAccessRequests.spec.protocol` must match this value in order for provisioning to occur.
 1. `policyActions`: a set of provisioner/platform defined policy actions to allow or deny a given user identity.
 1. `parameters`: (Optional)  A map of string:string key values.  Allows admins to control user and access provisioning by setting provisioner key-values.
 
@@ -415,7 +426,7 @@ In order to access the `Bucket`, a user must create a `BucketRequest` (BR) that 
 The user also needs to creates a `BucketAccessRequest` (BAR), which references the BR. At this point the workflow is the same as above.
 
 ### Delete
-Delete covers deleting a newly created bucket and revoking access to a bucket. In all cases the bucket contents is _not_ deleted **except** for greenfield buckets with a `releasePolicy` of "Delete". In this one case, the sidecar will gRPC call the provisioner's _Delete_ interface and it's up to each provisioner whether or not to physically delete bucket content.
+Delete covers deleting a newly created bucket and revoking access to a bucket. A `Bucket` (and thus the contents of the underlying bucket) is not deleted if there is more than one binding (accessor) remaining. Once all bindings have been removed **and** the release policy is "Delete", then the sidecar will gRPC call the provisioner's _Delete_ interface. It's up to each provisioner whether or not to physically delete bucket content, but the expectation is that the physical bukcet will at least be made unavailable.
 
 > Note: a `Bucket` cannot be deleted as long as there is one access to that `Bucket`, meaning at least one binding of the `BucketAccess` instance to the `BucketRequest`. So deleting a `Bucket` implies also deleting access to that `Bucket`. The converse is not true -- a `BucketAccessRequest` can be deleted without deleting the `Bucket`.
 
@@ -429,11 +440,11 @@ These are the common steps to delete a `Bucket`. Note: there are atypical workfl
 + COSI deletes the associated `Bucket`, which sets its deleteTimestamp but does not delete it due to finalizer.
 + COSI deletes the associated `BucketAccess` (BA), which sets its deleteTimestamp but does not delete it due to finalizer.
 + Sidecar sees the deleteTimestamp set in the BA and gRPC calls the provisoner's _Revoke_ interface.
-+ COSI removes the `Bucket` label for this BA.
-+ COSI looks at the `Bucket`'s labels for binding references. If there are any we stop at this point. The `Bucket`'s deleteTimestamp is set and its Phase is still "Bound", but the driver will not be invoked.
-+ When all the binding labels are gone, COSI sets the `Bucket`'s Phase to "Deleting".
++ COSI unbinds the BA from the `Bucket`.
++ COSI checks for additional binding references and if there are any we stop at this point. The `Bucket`'s deleteTimestamp is set and its Phase is still "Bound", but the driver will not be invoked.
++ When all the binding references have been removed, COSI sets the `Bucket`'s Phase to "Deleting".
 + The sidecar sees `Bucket.Phase` = "Deleting" and knows the `Bucket.releasePolicy`.
-+ If the release policy is "Delete" the sidecar gRPC calls the provisoner's _Delete_ interface. **Note:** it is crucial that COSI always sets the `Bucket.releasePolicy` to "Retain" except when the `BucketClass` defines the policy as "Delete". There is potentially a corner case where a brownfield `BucketRequest` references a BucketClass whose releasePolicy is "Delete". COSI needs to ignore all BucketClass settings in this situation.
++ If the release policy is "Delete", the sidecar gRPC calls the provisoner's _Delete_ interface.
 + If the release policy is "Retain" then its Phase is set to "Released" and potentially it can be reused.
 + When the sidecar sets the `Bucket`'s Phase to "Deleted", then COSI deletes all the finalizers and the real deletions occur.
 
@@ -527,8 +538,8 @@ cosi.io/provisioner-secret-namespace:
      // DriverName
      string DriverName = 1;
 
-     // SupportedProtocols
-     repeated DataProtocol SupportedProtocols = 2;
+     // SupportedProtocol
+     DataProtocol SupportedProtocol = 2;
 
      // NextId = 3;
  }
@@ -586,9 +597,9 @@ message Bucket {
 
      // RequestProtocol, one of the predefined values
      // Driver must check the protocol used to match 
-     // BucketClass:supportedProtocols - {"azureblob", "gcs", "s3", ... } [3]
+     // BucketClass:supportedProtocol - {"azureblob", "gcs", "s3", ... } [3]
      // BucketRequest:protocol - use this as request protocol but check 
-     // if the protocol is in the BucketClass' suppportedProtocols
+     // if the protocol is in the BucketClass' suppportedProtocol
      DataProtocol request_protocol = 2;
 
      // DriverParameters, these are parameters that are extracted from 
@@ -653,9 +664,9 @@ CREATE_INTERNAL_ERROR      : Failed to execute the requested call
     
      // RequestProtocol, one of the predefined values
      // Driver must check the protocol used to match 
-     // BucketClass:supportedProtocols - {"azureblob", "gcs", "s3", ... } [3]
+     // BucketClass:supportedProtocol - {"azureblob", "gcs", "s3", ... } [3]
      // BucketRequest:protocol - use this as request protocol but check 
-     // if the protocol is in the BucketClass' suppportedProtocols
+     // if the protocol is in the BucketClass' suppportedProtocol
      DataProtocol request_protocol = 2;
 
      // DriverParameters, these are parameters that are extracted from 
@@ -757,9 +768,9 @@ message ProviderCredentials {
     
      // RequestProtocol, one of the predefined values
      // Driver must check the protocol used to match 
-     // BucketClass:supportedProtocols - {"azureblob", "gcs", "s3", ... } [3]
+     // BucketClass:supportedProtocol - {"azureblob", "gcs", "s3", ... } [3]
      // BucketRequest:protocol - use this as request protocol but check 
-     // if the protocol is in the BucketClass' suppportedProtocols
+     // if the protocol is in the BucketClass' suppportedProtocol
      DataProtocol request_protocol = 2;
 
      // permission granted
@@ -793,9 +804,9 @@ GRANT_INVALID_PRINCIPAL    : Failed to grant, principal provided is invalid
     
      // RequestProtocol, one of the predefined values
      // Driver must check the protocol used to match 
-     // BucketClass:supportedProtocols - {"azureblob", "gcs", "s3", ... } [3]
+     // BucketClass:supportedProtocol - {"azureblob", "gcs", "s3", ... } [3]
      // BucketRequest:protocol - use this as request protocol but check 
-     // if the protocol is in the BucketClass' suppportedProtocols
+     // if the protocol is in the BucketClass' suppportedProtocol
      DataProtocol request_protocol = 2;
 
      // the service_account from which permissions are revoked
