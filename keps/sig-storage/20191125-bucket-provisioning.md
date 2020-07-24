@@ -184,56 +184,52 @@ spec:
       uid:
   protocol: [10]
     protocolSignature: ""
-    azureBlob: [11]
+    azureBlob:
       containerName:
       storageAccount:
-    s3: [12]
+    s3:
       endpoint:
       bucketName:
       region:
       signatureVersion:
-    gcs: [13]
+    gcs:
       bucketName:
       privateKeyName:
       projectId:
       serviceAccount:
-  parameters: [14]
+  parameters: [11]
 status:
-  message: [15]
-  phase: [16]
+  message: [12]
+  phase: [13]
   conditions:
 ```
 
 1. `name`: When created by COSI, the `Bucket` name is generated in this format: _"bucket-"<bucketRequest.name>"-"<bucketRequest.namespace>_. If an admin creates a `Bucket`, as is necessary for brownfield access, they can use any name.
-1. `labels`: added by the controller.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
-1. `finalizers`: added by the controller to defer `Bucket` deletion until backend deletion ops succeed.
-1. `provisioner`: The provisioner field as defined in the `BucketClass`.  Used by sidecars to filter `Bucket`s. Format: <provisioner-namespace>"/"<provisioner-name>, eg "ceph-rgw-provisoning/ceph-rgw.cosi.ceph.com".
-1. `releasePolicy`: Prescribes outcome of a Delete events. 
+2. `labels`: added by the controller.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
+3. `finalizers`: added by the controller to defer `Bucket` deletion until backend deletion ops succeed.
+4. `provisioner`: The provisioner field as defined in the `BucketClass`.  Used by sidecars to filter `Bucket`s. Format: <provisioner-namespace>"/"<provisioner-name>, eg "ceph-rgw-provisoning/ceph-rgw.cosi.ceph.com".
+5. `releasePolicy`: Prescribes outcome of a Delete events. 
    - _Retain_: (default) the `Bucket` and its data are preserved. The `Bucket` can potentially be reused.
    - _Delete_: the bucket and its contents are destroyed.
-
 > Note: the `Bucket`'s release policy is set to "Retain" as a default. Exercise caution when using the "Delete" release policy as the bucket content will be deleted.
 > Note: a `Bucket` is not deleted if it is bound to any `BucketRequest`s.
-
-1. `anonymousAccessMode`:  ACL specifying *uncredentialed* access to the Bucket.  This is applicable to cases where the storage instance or objects are intended to be publicly readable and/or writable.  Accepted values:
+6. `anonymousAccessMode`:  ACL specifying *uncredentialed* access to the Bucket.  This is applicable to cases where the storage instance or objects are intended to be publicly readable and/or writable.  Accepted values:
    - `private`: Default, disallow uncredentialed access to the storage instance.
    - `ro`: Read only, uncredentialed users can call ListBucket and GetObject.
    - `rw`: Read/Write, same as `ro` with the addition of PutObject being allowed.
    - `wo`: Write only, uncredentialed users can only call PutObject.
-1. `bucketClassName`: Name of the associated bucket class (greenfield only).
-1. `bindings`: an array of bindings between a `BucketAccess` instance and a `BucketRequest`. If the list is empty then there are no bindings (accessors) of this `Bucket` instance. The array format is: "<BucketAccess.name':'<BucketRequest.namespace>'/'<BucketRequest.name>"
-1. `permittedNamespaces`: An array of namespaces, identified by a name and uid, defining from which namespace a `BucketRequest`s is allowed to bind to a `Bucket`. For greenfield this list is copied from the `BucketClass` with the `BucketRequest`'s namespace added. For brownfield, this is an arbitrary list defined by the admin.
-
 > Note: does not reflect or alter the backing storage instances' ACLs or IAM policies.
-
-1. `protocol`: The protocol the application will use to access the storage instance.
+7. `bucketClassName`: Name of the associated bucket class (greenfield only).
+8. `bindings`: an array of bindings between a `BucketAccess` instance and a `BucketRequest`. If the list is empty then there are no bindings (accessors) of this `Bucket` instance. The array format is: "<BucketAccess.name':'<BucketRequest.namespace>'/'<BucketRequest.name>"
+9. `permittedNamespaces`: An array of namespaces, identified by a name and uid, defining from which namespace a `BucketRequest`s is allowed to bind to a `Bucket`. For greenfield this list is copied from the `BucketClass` with the `BucketRequest`'s namespace added. For brownfield, this is an arbitrary list defined by the admin.
+10. `protocol`: The protocol the application will use to access the storage instance.
    - `protocolSignature`: Specifies the protocol targeted by this Bucket instance.  One of:
      - `azureBlob`: data required to target a provisioned azure container and/or storage account.
      - `s3`: data required to target a provisioned S3 bucket and/or user.
      - `gcs`: data required to target a provisioned GCS bucket and/or service account.
-1. `parameters`: a copy of the BucketClass parameters.
-1. `message`: a human readable description detailing the reason for the current `phase``.
-1. `phase`: is the current state of the Bucket:
+11. `parameters`: a copy of the BucketClass parameters.
+12. `message`: a human readable description detailing the reason for the current `phase``.
+13. `phase`: is the current state of the Bucket:
    - *Creating*: the controller is in the process of provisioning the bucket, meaning creating a new bucket or granting access to an existing bucket.
    - *Deleting*: the Bucket is unbound and ready to be deleted.
    - *Deleted*: the physical bucket has been deleted and the `Bucket` is about to be removed.
@@ -263,20 +259,17 @@ parameters: [7]
 ```
 
 1. `provisioner`: the name of the driver. If supplied the driver container and sidecar container are expected to be deployed. Format: <provisioner-namespace>"/"<provisioner-name>, eg "ceph-rgw-provisoning/ceph-rgw.cosi.ceph.com".
-1. `isDefaultBucketClass`: (optional) boolean, default is false. If set to true then potentially a `BucketRequest` does not need to specify a `BucketClass`. If the greenfield `BucketRequest` omits the `BucketClass` and a default `BucketClass`'s protocol matches the `BucketRequest`'s protocol then the default bucket class is used.
-1. `protocol`: (required) protocol supported by the associated object store. This field validates that the `BucketRequest`'s desired protocol is supported.
-
+2. `isDefaultBucketClass`: (optional) boolean, default is false. If set to true then potentially a `BucketRequest` does not need to specify a `BucketClass`. If the greenfield `BucketRequest` omits the `BucketClass` and a default `BucketClass`'s protocol matches the `BucketRequest`'s protocol then the default bucket class is used.
+3. `protocol`: (required) protocol supported by the associated object store. This field validates that the `BucketRequest`'s desired protocol is supported.
 > Note: if an object store supports more than one protocol then the admin should create a `BucketClass` per protocol.
-
-1. `anonymousAccessMode`: (optional) ACL specifying *uncredentialed* access to the Bucket.  This is applicable for cases where the storage instance or objects are intended to be publicly readable and/or writable.
-1. `additionalPermittedNamespaces`: (optional) a list of namespaces *in addition to the originating namespace* that will be allowed access to the `Bucket`.
-1. `releasePolicy`: defines bucket retention for greenfield `BucketRequest` deletes. **
+4. `anonymousAccessMode`: (optional) ACL specifying *uncredentialed* access to the Bucket.  This is applicable for cases where the storage instance or objects are intended to be publicly readable and/or writable.
+5. `additionalPermittedNamespaces`: (optional) a list of namespaces *in addition to the originating namespace* that will be allowed access to the `Bucket`.
+6. `releasePolicy`: defines bucket retention for greenfield `BucketRequest` deletes. **
    - _Retain_: (default) the `Bucket` and its data are preserved. The `Bucket` can potentially be reused.
    - _Delete_: the bucket and its contents are destroyed.
-1. `parameters`: (optional) a map of string:string key values.  Allows admins to set provisioner key-values.  **Note:** see [Provisioner Secrets](#provisioner-secrets) for some predefined `parameters` settings.
-
 > Note: the `Bucket`'s release policy is set to "Retain" as a default. Exercise caution when using the "Delete" release policy as the bucket content will be deleted.
 > Note: a `Bucket` is not deleted if it is bound to any `BucketRequest`s.
+7. `parameters`: (optional) a map of string:string key values.  Allows admins to set provisioner key-values.  **Note:** see [Provisioner Secrets](#provisioner-secrets) for some predefined `parameters` settings.
 
 ### Access APIs
 
@@ -320,7 +313,7 @@ status:
    - *Bound*: Provisioning operations have completed and the `BucketAccessRequest` has been bound to a `BucketAccess`.
    - *Deleting*: The controller has detected deletion of the `BucketAccessRequest` and begun the delete operation.  **Note:** additionally there may be some error phases.
 
-#### BucketAccess
+#### BucketAccess (BA)
 
 A cluster-scoped administrative API which encapsulates fields from the `BucketAccessRequest` and the `BucketAccessClass`.  The purpose of the API is to serve as communication path between provisioners and the central COSI controller.  In greenfield, the COSI controller creates `BucketAccess` instances for new `BucketAccessRequest`s.  There is one `BucketAccess` instance per `BucketAccessRequest`.
 
@@ -360,7 +353,7 @@ metadata:
    - _Failed_: error and all retries have been exhausted.
    - _Retrying_: set when a driver or Kubernetes error is encountered during provisioning operations indicating a retry loop.
 
-#### BucketAccessClass
+#### BucketAccessClass (BAC)
 
 A cluster-scoped admin custom resource providing a way for admins to specify policies that may be used to access buckets.  These are always applicable in greenfield, where access is dynamically granted, and only sometimes applicable in brownfield, where a user's identity may already exist, but not yet have access to a bucket.  In this case, a `BucketAccessRequest` will still specify the `BucketAccessClass` in order to determine which actions it is granted.
 
