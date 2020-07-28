@@ -43,6 +43,7 @@ status: provisional
       - [BucketAccessRequest](#bucketaccessrequest)
       - [BucketAccess](#bucketaccess)
       - [BucketAccessClass](#bucketaccessclass)
+    - [App Pod](#app-pod)
   - [Topology](#topology)
   - [Workflows](#workflows)
     - [Create](#create)
@@ -78,11 +79,11 @@ This proposal does _not_ include a standardized *protocol* or abstraction of sto
 
 ##  Vocabulary
 
-+ _adapter_ - a pod per node which receives Kubelet gRPC _nodePublish_ and _nodeUnpublish_ requests, ensures the target bucket has been provisioned, and notifies the kubelet when the pod can be run.
 + _brownfield bucket_ - an existing storage bucket which could be part of a Kubernetes cluster or completely separate.
 + _BucketRequest_ - a user-namespaced custom resource representing a request for a storage instance endpoint.
 + _BucketClass_ - a cluster-scoped custom resource containing fields defining the provisioner and an immutable parameter set for creating new buckets.
 + _Bucket_ - a cluster-scoped custom resource referenced by a `BucketRequest` and containing connection information and metadata for a storage instance.
++ _cosi-node-adapter_ - a pod per node which receives Kubelet gRPC _NodePublishVolume_ and _NodeUnpublishVolume_ requests, ensures the target bucket has been provisioned, and notifies the kubelet when the pod can be run.
 + _driver_ - a container (usually paired with a sidecar container) that is reponsible for communicating with the underlying object store to create, delete, grant access to, and revoke access from buckets. Drivers talk gRPC and need no knowledge of Kubernetes. Drivers are typically written by storage vendors, and should not be given any access outside of their namespace.
 + _greenfield bucket_ - a new bucket created by automation.
 + _object_ - an atomic, immutable unit of data stored in buckets.
@@ -367,6 +368,42 @@ parameters: [3]
 
 ---
 
+### App Pod
+The application pod utilizes CSI's inline empheral volume support to provide the endpoint config and secret credentials in a projected volume. This approach also, importantly, prevents the pod from launching before the bucket has been provisioned since the kubelet waits to start the pod until it has received the cosi-node-adpater's `NodePublishVolume` response.
+
+Here is a sample pod manifest:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-app-pod
+  namespace: dev-ns
+spec:
+  serviceAccountName: [1]
+  containers:
+    - name: my-app
+      image: ...
+      volumeMounts:
+        - mountPath: /cosi [2]
+          name: cosi-vol
+  volumes:
+    - name: cosi-vol
+      csi: [3]
+        driver: cosi.sigs.k8s.io [4]
+        volumeAttributes: [5]
+          bucketRequestName: <my-br-name>
+          bucketAccessRequestName: <my-bar-name>
+          bucketRequestNamespace:
+```
+1. the service account may be needed depending on cloud IAM intergration with kubernetes.
+1. the mount path is the directory where the app will read the credentials and endpoint.
+1. this is an inline CSI volume.
+1. the name of the cosi-node-adapter.
+1. information needed by the cosi-node-adapter to verify that the bucket has been provisioned.
+
+> Note: `VolumeLifeCycleModes` needs to be set to "empheral" for inline COSI node adapter.
+
 ### Topology
 (Diagram to be added)
 
@@ -377,6 +414,8 @@ Here we describe the workflows used to create/provision new or existing buckets 
 
 ### Create
 _Create_ covers creating a new bucket and/or granting access to an existing bucket. In both cases the `Bucket` and `BucketAccess` resources described above are instantiated.
+
+Also, when the app pod is created, the kubelet will gRPC call `NodePublishVolume` which is received by the cosi-node-adapter. The pod hangs until the adapter responds to the gRPC request. The adapter ensures that the target bucket has been provisioned and is ready to be accessed.
 
 "Greenfield" defines a new bucket created based on a user's [BucketRequest](#bucketrequest), and access granted to this bucket.
 “Brownfield” describes any case where access needs to be granted to an existing bucket. In brownfield, this bucket is abstracted by a [Bucket](#Bucket) instance, and expected to be created manually by the admin. There can be multiple `BucketRequests` that bind to a single `Bucket`.
@@ -400,12 +439,20 @@ Here is the workflow:
 + The sidecar sees the newly created BA and gRPC calls the driver to grant access.
 + COSI sees the completed BA which triggers binding the BA in `Bucket`.
 
++ Depending on when the app pod was started, the kubelet call `NodePublishVolume` and waits for the response from the cosi-node-adapter.
++ The cois-node-adaper sees the `NodePublishVolume` request and is passed the `BucketRequest` and `BucketAccessRequest` names and namespace.
++ The adapter gets the corresponding `Bucket` and `BucketAccess` instances, and verifies that the BA has been bound.
++ The adapter creates the host files for the secret and endpoint info.
++ At this point the adapter responds to the `NodePublishVolue` request and the kubelet continues to launch the pod
+
 ##### Sharing Dynamically Created Buckets (green-brown)
 Once a `Bucket` is created, it is discoverable by other users in the cluster (who have been granted the ability to list `Bucket`s or via non-automated methods).  In order to access the `Bucket`, a user must create a `BucketRequest` (BR) that specifies the `Bucket` instance by name. This `BucketRequest` should not specify a `BucketClass` since the `Bucket` instance already exists.
 The user also needs to creates a `BucketAccessRequest` (BAR), which references the BR. At this point the workflow is the same as above.
 
 ### Delete
 _Delete_ covers deleting a bucket and/or revoking access to a bucket. A `Bucket` delete is triggerd by the user deleting their `BucketRequest`. A `BucketAccess` removal is triggered by the user deleting their `BucketAccessRequest`. A bucket is not deleted if there are any bindings (accessors). Once all bindings have been removed the `Bucket`'s Phase is set to "Released", **and** if the release policy is "Delete", then the sidecar will gRPC call the provisioner's _Delete_ interface. It's up to each provisioner whether or not to physically delete bucket content, but the expectation is that the physical bukcet will at least be made unavailable.
+
+Also, when the app pod terminates, the kubelet will gRPC call `NodeUnpublishVolume` which is received by the cosi-node-adapter. The adapter will ensure that the access granted to this pod is removed, and if this pod is the last accessor, then depending on the bucket's _releasePolicy_, the bucket may be deleted.
 
 > Note: a brownfield `BucketRequest` is not honored if the associated `Bucket`'s _deleteTimestamp_ is set.
 
