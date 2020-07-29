@@ -396,7 +396,7 @@ spec:
 
 ### Topology
 
-![Architecture Diagram](COSI%20architecture_COSI%20architecture.png)
+![Architecture Diagram](COSI%20Architecture_COSI%20architecture.png)
 
 ## Workflows
 Here we describe the workflows used to create/provision new or existing buckets and to delete/de-provision buckets.
@@ -405,7 +405,7 @@ Here we describe the workflows used to create/provision new or existing buckets 
 
 ### CreateBucket
 
-![CreateBucket Workflow](COSI%20Create%20Bucket_Create%20Bucket%20Workflow.png)
+![CreateBucket Workflow](COSI%20Architecture_Create%20Bucket%20Workflow.png)
 
 _Create_ covers creating a new bucket and/or granting access to an existing bucket. In both cases the `Bucket` and `BucketAccess` resources described above are instantiated.
 
@@ -445,7 +445,7 @@ The user also needs to creates a `BucketAccessRequest` (BAR), which references t
 
 ### DeleteBucket
 
-![DeleteBucket Workflow](COSI%20Delete%20Bucket_Delete%20Bucket%20Workflow.png)
+![DeleteBucket Workflow](COSI%20Architecture_Delete%20Bucket%20Workflow.png)
 
 _Delete_ covers deleting a bucket and/or revoking access to a bucket. A `Bucket` delete is triggerd by the user deleting their `BucketRequest`. A `BucketAccess` removal is triggered by the user deleting their `BucketAccessRequest`. A bucket is not deleted if there are any bindings (accessors). Once all bindings have been removed the `Bucket`'s Phase is set to "Released", **and** if the release policy is "Delete", then the sidecar will gRPC call the provisioner's _Delete_ interface. It's up to each provisioner whether or not to physically delete bucket content, but the expectation is that the physical bukcet will at least be made unavailable.
 
