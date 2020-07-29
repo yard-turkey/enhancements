@@ -395,14 +395,18 @@ spec:
 > Note: `VolumeLifeCycleModes` needs to be set to "empheral" for inline COSI node adapter.
 
 ### Topology
-(Diagram to be added)
+
+![Architecture Diagram](COSI%20architecture_COSI%20architecture.png)
 
 ## Workflows
 Here we describe the workflows used to create/provision new or existing buckets and to delete/de-provision buckets.
 
 >  Note: Per [Non-Goals](#non-goals), access management is not within the scope of this KEP.  ACLs, access policies, and credentialing should be handled out of band.
 
-### Create
+### CreateBucket
+
+![CreateBucket Workflow](COSI%20Create%20Bucket_Create%20Bucket%20Workflow.png)
+
 _Create_ covers creating a new bucket and/or granting access to an existing bucket. In both cases the `Bucket` and `BucketAccess` resources described above are instantiated.
 
 Also, when the app pod is created, the kubelet will gRPC call `NodePublishVolume` which is received by the cosi-node-adapter. The pod hangs until the adapter responds to the gRPC request. The adapter ensures that the target bucket has been provisioned and is ready to be accessed.
@@ -439,7 +443,10 @@ Here is the workflow:
 Once a `Bucket` is created, it is discoverable by other users in the cluster (who have been granted the ability to list `Bucket`s or via non-automated methods).  In order to access the `Bucket`, a user must create a `BucketRequest` (BR) that specifies the `Bucket` instance by name. This `BucketRequest` should not specify a `BucketClass` since the `Bucket` instance already exists.
 The user also needs to creates a `BucketAccessRequest` (BAR), which references the BR. At this point the workflow is the same as above.
 
-### Delete
+### DeleteBucket
+
+![DeleteBucket Workflow](COSI%20Delete%20Bucket_Delete%20Bucket%20Workflow.png)
+
 _Delete_ covers deleting a bucket and/or revoking access to a bucket. A `Bucket` delete is triggerd by the user deleting their `BucketRequest`. A `BucketAccess` removal is triggered by the user deleting their `BucketAccessRequest`. A bucket is not deleted if there are any bindings (accessors). Once all bindings have been removed the `Bucket`'s Phase is set to "Released", **and** if the release policy is "Delete", then the sidecar will gRPC call the provisioner's _Delete_ interface. It's up to each provisioner whether or not to physically delete bucket content, but the expectation is that the physical bukcet will at least be made unavailable.
 
 Also, when the app pod terminates, the kubelet will gRPC call `NodeUnpublishVolume` which is received by the cosi-node-adapter. The adapter will ensure that the access granted to this pod is removed, and if this pod is the last accessor, then depending on the bucket's _releasePolicy_, the bucket may be deleted.
