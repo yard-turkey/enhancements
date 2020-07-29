@@ -99,7 +99,6 @@ This proposal does _not_ include a standardized *protocol* or abstraction of sto
 #### Admin
 
 - As a cluster administrator, I can control access to new and existing buckets when accessed from the cluster, regardless of the backing object store.
-- As an admin, I can control which namespaces have the ability to share request access to a bucket.
 
 #### User
 
@@ -129,11 +128,10 @@ spec:
   protocol: [3]
   bucketPrefix: [4]
   bucketClassName: [5]
-  secretName: [6]
-  bucketInstanceName: [7]
+  bucketInstanceName: [6]
 status:
-  phase: [8]
-  conditions: 
+  phase: [7]
+  conditions:
 ```
 
 1. `labels`: added by the controller.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
@@ -141,10 +139,10 @@ status:
 1. `protocol`: (required) specifies the desired protocol.  One of {“s3”, “gcs”, or “azureBlob”}.
 1. `bucketPrefix`: (optional) prefix prepended to a randomly generated bucket name, eg. “yosemite-photos-". If empty, no prefix is prepended. If `bucketInstanceName` is also supplied then it overrides `bucketPrefix'.
 1. `bucketClassName`: (optional) name of the target `BucketClass` used for greenfield provisioning only. If omitted, a default bucket class matching the protocol is searched for. If the bucket class does not support the requested protocol, an error is logged and retries occur.
-1. `secretName`: (optional) Secret in the `BucketRequest`'s namespace storing credentials to be used by a workload for bucket access.
 1. `bucketInstanceName`: (optional) name of the cluster-wide `Bucket` instance. If blank, then COSI fills in the name during the binding step. If defined by the user, then this names the `Bucket` instance created by the admin. There is no automation available to make this name known to the user. Once a `Bucket` instance is created, the name of the actual bucket can be found.
 1. `phase`: 
-   - *Creating*: the controller is in the process of provisioning the bucket, meaning creating a new bucket or granting access to an existing bucket.
+   - *Creating*: COSI is in the process of provisioning the bucket, meaning creating a new bucket or granting access to an existing bucket.
+   - *Created*: COSI has provisioned the bucket, meaning a new bucket has been created (if greenfield) and access to the bucket has been granted.
    - *Bound*: access to a bucket has been granted, and, for greenfield, a new bucket was created. The `Bucket` is bound to a `BucketAccess` instance.
    - *Released*: the Bucket is unbound and can potentially reused.
    - *Deleted*: the physical bucket has been deleted and the `Bucket` is about to be removed.
@@ -178,10 +176,7 @@ spec:
   bucketClassName: [7]
   bindings: [8]
     - "<BucketAccess.name>"
-  permittedNamespaces: [9]
-    - name:
-      uid:
-  protocol: [10]
+  protocol: [9]
     protocolSignature: ""
     azureBlob:
       containerName:
@@ -196,9 +191,9 @@ spec:
       privateKeyName:
       projectId:
       serviceAccount:
-  parameters: [11]
+  parameters: [10]
 status:
-  phase: [12]
+  phase: [11]
   conditions:
 ```
 
@@ -219,7 +214,6 @@ status:
 > Note: does not reflect or alter the backing storage instances' ACLs or IAM policies.
 7. `bucketClassName`: Name of the associated bucket class (greenfield only).
 8. `bindings`: an array of `BucketAccess.name`(s). If the list is empty then there are no bindings (accessors) to this `Bucket` instance and the `Bucket` can potentially be deleted.
-9. `permittedNamespaces`: An array of namespaces, identified by a name and UID, defining from which namespace a `BucketRequest`s is allowed to bind to a `Bucket`. For greenfield this list is copied from the `BucketClass` with the `BucketRequest`'s namespace added. For brownfield, this is an arbitrary list defined by the admin.
 10. `protocol`: The protocol the application will use to access the storage instance.
    - `protocolSignature`: Specifies the protocol targeted by this Bucket instance.  One of:
      - `azureBlob`: data required to target a provisioned azure container and/or storage account.
@@ -247,11 +241,8 @@ provisioner: [1]
 isDefaultBucketClass: [2]
 protocol: {"azureblob", "gcs", "s3", ... } [3]
 anonymousAccessMode: {"ro", "wo", "rw"} [4]
-additionalPermittedNamespaces: [5]
-- name:
-  uid: 
-releasePolicy: {"Delete", "Retain"} [6]
-parameters: [7]
+releasePolicy: {"Delete", "Retain"} [5]
+parameters: [6]
 ```
 
 1. `provisioner`: the name of the driver. If supplied the driver container and sidecar container are expected to be deployed. Format: <provisioner-namespace>"/"<provisioner-name>, eg "ceph-rgw-provisoning/ceph-rgw.cosi.ceph.com".
@@ -259,7 +250,6 @@ parameters: [7]
 3. `protocol`: (required) protocol supported by the associated object store. This field validates that the `BucketRequest`'s desired protocol is supported.
 > Note: if an object store supports more than one protocol then the admin should create a `BucketClass` per protocol.
 4. `anonymousAccessMode`: (optional) ACL specifying *uncredentialed* access to the Bucket.  This is applicable for cases where the storage instance or objects are intended to be publicly readable and/or writable.
-5. `additionalPermittedNamespaces`: (optional) a list of namespaces *in addition to the originating namespace* that will be allowed access to the `Bucket`.
 6. `releasePolicy`: defines bucket retention for greenfield `BucketRequest` deletes. **
    - _Retain_: (default) the `Bucket` and its data are preserved. The `Bucket` can potentially be reused.
    - _Delete_: the bucket and its contents are destroyed.
@@ -288,7 +278,7 @@ metadata:
 spec:
   serviceAccountName: [3]
   accessSecretName: [4]
-  bucketInstance: [5]
+  bucketInstanceName: [5]
   bucketAccessClassName: [6]
   bucketAccessName: [7]
 status:
@@ -299,7 +289,7 @@ status:
 1. `finalizers`: added by the controller to defer `BucketAccessRequest` deletion until backend deletion ops succeed.
 1. `serviceAccountName`: (optional) the name of a Kubernetes ServiceAccount in the same namespace.  This field is included to support cloud provider identity integration.  Should not be set when specifying `accessSecretName`.
 1. `accessSecretName`: (optional) the name of a Kubernetes Secret in the same namespace.  This field is used when there is not cloud provider identity integration.  Should not be set when specifying `serviceAccountName`.
-1. `bucketInstance`: The the name of the `Bucket` instance to which the user identity or ServiceAccount should be granted access to, according to the policies defined in the `BucketAccessClass`.
+1. `bucketInstanceName`: The the name of the `Bucket` instance to which the user identity or ServiceAccount should be granted access to, according to the policies defined in the `BucketAccessClass`.
 1. `bucketAccessClassName`: name of the `BucketAccessClass` specifying the desired set of policy actions to be set for a user identity or ServiceAccount.
 1. `bucketAccessName`: name of the bound cluster-scoped `BucketAccess` instance.
 1. `phase`: is the current state of the `BucketAccessRequest`:
@@ -369,7 +359,7 @@ parameters: [3]
 ---
 
 ### App Pod
-The application pod utilizes CSI's inline empheral volume support to provide the endpoint config and secret credentials in a projected volume. This approach also, importantly, prevents the pod from launching before the bucket has been provisioned since the kubelet waits to start the pod until it has received the cosi-node-adpater's `NodePublishVolume` response.
+The application pod utilizes CSI's inline empheral volume support to provide the endpoint and secret credentials in an in-memory volume. This approach also, importantly, prevents the pod from launching before the bucket has been provisioned since the kubelet waits to start the pod until it has received the cosi-node-adpater's `NodePublishVolume` response.
 
 Here is a sample pod manifest:
 
@@ -410,7 +400,7 @@ spec:
 ## Workflows
 Here we describe the workflows used to create/provision new or existing buckets and to delete/de-provision buckets.
 
->  Note: Per [Non-Goals](#non-goals), access management is not within the scope of this KEP.  ACLs, access policies, and credentialing should be handled out of band.  Buckets may be configured to allow access for specific namespaces.
+>  Note: Per [Non-Goals](#non-goals), access management is not within the scope of this KEP.  ACLs, access policies, and credentialing should be handled out of band.
 
 ### Create
 _Create_ covers creating a new bucket and/or granting access to an existing bucket. In both cases the `Bucket` and `BucketAccess` resources described above are instantiated.
