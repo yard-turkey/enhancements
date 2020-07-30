@@ -110,9 +110,7 @@ This proposal does _not_ include a standardized *protocol* or abstraction of sto
 
 #### BucketRequest
 
-A user facing, namespaced custom resource requesting a bucket endpoint. A `BucketRequest` (BR) lives in the app's namespace.  In addition to a `BucketRequest`, a [BucketAccessRequest](#bucketaccessrequest) is required in order to grant credentialed access to the bucket. 
-
-**NOTE:** _Currently under review: we are discussing whether or not a BR is needed for any brownfield use-cases. We are considering BRs only apply to greenfield bucket creation (where a BAR is also needed), and that all brownfield accesses need only a BAR._
+A user facing, namespaced custom resource requesting a bucket endpoint. A `BucketRequest` (BR) lives in the app's namespace.  In addition to a `BucketRequest`, a [BucketAccessRequest](#bucketaccessrequest) is necessary in order to grant credentialed access to the bucket. BRs are required for bo th greenfield and brownfield uses.
 
 ```yaml
 apiVersion: cosi.io/v1alpha1
@@ -123,39 +121,39 @@ metadata:
   labels:
     cosi.io/provisioner: [1]
   finalizers:
-  - cosi.io/finalizer [2]
+    - cosi.io/finalizer [2]
 spec:
   protocol: [3]
   bucketPrefix: [4]
   bucketClassName: [5]
   bucketInstanceName: [6]
 status:
-  phase: [7]
-  conditions:
+  conditions: [7]
+    - Type: {BucketAvailable} [8]
+      Status: [9]
+      Reason: [10]
+      Message: [11]
 ```
 
 1. `labels`: added by the controller.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
 1. `finalizers`: added by controller to defer `BucketRequest` deletion until backend deletion ops succeed.
 1. `protocol`: (required) specifies the desired protocol.  One of {“s3”, “gcs”, or “azureBlob”}.
 1. `bucketPrefix`: (optional) prefix prepended to a randomly generated bucket name, eg. “yosemite-photos-". If empty, no prefix is prepended. If `bucketInstanceName` is also supplied then it overrides `bucketPrefix'.
-1. `bucketClassName`: (optional) name of the target `BucketClass` used for greenfield provisioning only. If omitted, a default bucket class matching the protocol is searched for. If the bucket class does not support the requested protocol, an error is logged and retries occur.
+1. `bucketClassName`: (optional) name of the target `BucketClass`. If omitted, a default bucket class matching the protocol is searched for. If the bucket class does not support the requested protocol, an error is logged and retries occur. The `BucketClass` is required for both greenfield and brownfield uses.
 1. `bucketInstanceName`: (optional) name of the cluster-wide `Bucket` instance. If blank, then COSI fills in the name during the binding step. If defined by the user, then this names the `Bucket` instance created by the admin. There is no automation available to make this name known to the user. Once a `Bucket` instance is created, the name of the actual bucket can be found.
-1. `phase`: 
-   - *Creating*: COSI is in the process of provisioning the bucket, meaning creating a new bucket or granting access to an existing bucket.
-   - *Created*: COSI has provisioned the bucket, meaning a new bucket has been created (if greenfield) and access to the bucket has been granted.
-   - *Bound*: access to a bucket has been granted, and, for greenfield, a new bucket was created. The `Bucket` is bound to a `BucketAccess` instance.
-   - *Released*: the Bucket is unbound and can potentially reused.
-   - *Deleted*: the physical bucket has been deleted and the `Bucket` is about to be removed.
-
-> Note: additionally there are some error phases, such as *ErrBucketClassDoesNotSupportProtocol*, *ErrBucketDeletionInProgress*, etc.
+1. `conditions`: the latest available observation of this `BucketRequest`. (Phase is not used.)
+1. `Type`: only one type is supported: "BucketAvailable". If the condition's `Status` is true then the bucket is available to be accessed for the `Reason` provided. If `Status` is false then the bucket is unable to be accessed and, again, `Reason` states why.
+1. `Status`: one of true, false or unknown. If not specified then unknown is assumed. A true status indicates the this condition is true at the time of observation.
+1. `Reason`: one of "Bound", "Creating", "Deleting", "Released".
+1. `Message`: optional human readable message containing more details.
 
 #### Bucket
 
-A cluster-scoped custom resource representing the abstraction of a single object store bucket. At a minimum, a `Bucket` instance stores enough identifying information so that drivers can accurately target the storage instance (e.g. during a deletion process).  For greenfield `Bucket`s all of the associated bucket classes fields are copied to the `Bucket`. Additionally, endpoint data returned by the driver is copied to the `Bucket` by the sidecar.
+A cluster-scoped custom resource representing the abstraction of a single object store bucket. At a minimum, a `Bucket` instance stores enough identifying information so that drivers can accurately target the backend object store (e.g. needed during a deletion process).  All of the associated bucket classes fields are copied to the `Bucket`. Additionally, endpoint data returned by the driver is copied to the `Bucket` by the sidecar.
 
 There is a 1-to-many relationship between a `Bucket` and a `BucketRequest`, meaning that many `BucketRequest`s can reference the same `Bucket`.
 
-For greenfield, COSI creates the `Bucket` based on values in the `BucketRequest` and `BucketClass`. For brownfield, an admin manually creates the `Bucket` and COSI takes care of binding and populating fields returned by the provisioner.
+For greenfield, COSI creates the `Bucket` based on values in the `BucketRequest` and `BucketClass`. For brownfield, an admin manually creates the `Bucket` and COSI copies bucket class fields, populates fields returned by the provisioner, and binds the `Bucket` to the `BucketAccess`.
 
 ```yaml
 apiVersion: cosi.io/v1alpha1
@@ -191,10 +189,16 @@ spec:
       privateKeyName:
       projectId:
       serviceAccount:
-  parameters: [10]
+  allowedNamespaces: [10]
+    - name:
+      uid:
+  parameters: [11]
 status:
-  phase: [11]
-  conditions:
+  conditions: [12]
+    - Type: {BucketAvailable} [13]
+      Status: [14]
+      Reason: [15]
+      Message: [16]
 ```
 
 1. `name`: When created by COSI, the `Bucket` name is generated in this format: _"bucket-"<bucketRequest.name>"-"<bucketRequest.namespace>_. If an admin creates a `Bucket`, as is necessary for brownfield access, they can use any name.
@@ -214,23 +218,24 @@ status:
 > Note: does not reflect or alter the backing storage instances' ACLs or IAM policies.
 7. `bucketClassName`: Name of the associated bucket class (greenfield only).
 8. `bindings`: an array of `BucketAccess.name`(s). If the list is empty then there are no bindings (accessors) to this `Bucket` instance and the `Bucket` can potentially be deleted.
-10. `protocol`: The protocol the application will use to access the storage instance.
+9. `protocol`: The protocol the application will use to access the storage instance.
    - `protocolSignature`: Specifies the protocol targeted by this Bucket instance.  One of:
      - `azureBlob`: data required to target a provisioned azure container and/or storage account.
      - `s3`: data required to target a provisioned S3 bucket and/or user.
      - `gcs`: data required to target a provisioned GCS bucket and/or service account.
+10. `allowedNamespaces`: a copy of the `BucketClass`'s allowed namespaces. Additionally, this list can be mutated by the admin to allow or deny namespaces over the life of the bucket.
 11. `parameters`: a copy of the BucketClass parameters.
-12. `phase`: is the current state of the `Bucket`:
-   - *Creating*: the controller is in the process of provisioning the bucket, meaning creating a new bucket or granting access to an existing bucket.
-   - *Bound*: access to a bucket has been granted, and, for greenfield, a new bucket was created. The `Bucket` is bound to a `BucketAccess`.
-   - *Released*: the Bucket is unbound and can potentially reused.
-   - *Deleted*: the physical bucket has been deleted and the `Bucket` is about to be removed.
+12. `conditions`: the latest available observation of this `Bucket`. (Phase is not used.)
+13. `Type`: only one type is supported: "BucketAvailable". If the condition's `Status` is true then the bucket is available to be accessed for the `Reason` provided. If `Status` is false then the bucket is unable to be accessed and, again, `Reason` states why.
+14. `Status`: one of true, false or unknown. If not specified then unknown is assumed. A true status indicates the this condition is true at the time of observation.
+15. `Reason`: one of "Available", "Bound", "Creating", "Deleting", "Released". Note: "Available" indicates the `Bucket` was observed and its `conditions` was empty, which is expected when a brownfield `Bucket` is manually created.
+16. `Message`: optional human readable message containing more details.
 
 #### BucketClass
 
-A cluster-scoped custom resource to provide admins control over the handling of greenfield bucket provisioning.  The `BucketClass` (BC) defines a release policy, specifies driver specific parameters, and provides the provisioner name. A default bucket class can be defined for each supported protocol, which allows the bucket class to be omitted from a `BucketRequest`. Most of the `BucketClass` fields are copied to the generated (greenfield) `Bucket` instance.
+A cluster-scoped custom resource to provide admins control over the handling of bucket provisioning.  The `BucketClass` (BC) defines a release policy, specifies driver specific parameters, and provides the provisioner name. A list of allowed namespaces can be specified to restrict new bucket creation and access to existing buckets. A default bucket class can be defined for each supported protocol, which allows the bucket class to be omitted from a `BucketRequest`. Most of the `BucketClass` fields are copied to the generated `Bucket` instance.
 
-> Note: Bucket classes are not used for brownfield provisioning. Instead, an admin manually creates a `Bucket` and the user references this `Bucket` in their `BucketRequest.bucketInstanceName`.
+> Note: a `BucketClass` is immutable, like a storage class, but the fields copied to the `Bucket` can be edited by the admin.
 
 ```yaml
 apiVersion: cosi.io/v1alpha1
@@ -242,7 +247,10 @@ isDefaultBucketClass: [2]
 protocol: {"azureblob", "gcs", "s3", ... } [3]
 anonymousAccessMode: {"ro", "wo", "rw"} [4]
 releasePolicy: {"Delete", "Retain"} [5]
-parameters: [6]
+allowedNamespaces: [6]
+  - name:
+    uid:
+parameters: [7]
 ```
 
 1. `provisioner`: the name of the driver. If supplied the driver container and sidecar container are expected to be deployed. Format: <provisioner-namespace>"/"<provisioner-name>, eg "ceph-rgw-provisoning/ceph-rgw.cosi.ceph.com".
@@ -250,11 +258,12 @@ parameters: [6]
 3. `protocol`: (required) protocol supported by the associated object store. This field validates that the `BucketRequest`'s desired protocol is supported.
 > Note: if an object store supports more than one protocol then the admin should create a `BucketClass` per protocol.
 4. `anonymousAccessMode`: (optional) ACL specifying *uncredentialed* access to the Bucket.  This is applicable for cases where the storage instance or objects are intended to be publicly readable and/or writable.
-6. `releasePolicy`: defines bucket retention for greenfield `BucketRequest` deletes. **
+5. `releasePolicy`: defines bucket retention for greenfield `BucketRequest` deletes. **
    - _Retain_: (default) the `Bucket` and its data are preserved. The `Bucket` can potentially be reused.
    - _Delete_: the bucket and its contents are destroyed.
 > Note: the `Bucket`'s release policy is set to "Retain" as a default. Exercise caution when using the "Delete" release policy as the bucket content will be deleted.
 > Note: a `Bucket` is not deleted if it is bound to any `BucketRequest`s.
+6. `allowedNamespaces`: a list of namespaces (name, uid) that are permitted to either create new buckets or to access existing buckets. This list is static for the life of the `BucketClass`, but the `Bucket` instance's list of allowed namespaces can be mutated by the admin.
 7. `parameters`: (optional) a map of string:string key values.  Allows admins to set provisioner key-values.  **Note:** see [Provisioner Secrets](#provisioner-secrets) for some predefined `parameters` settings.
 
 ### Access APIs
@@ -264,8 +273,6 @@ The Access APIs abstract the backend policy system.  Access policy and user iden
 #### BucketAccessRequest
 
 A user namespaced custom resource representing an object store user and an access policy defining the user’s relation to a storage instance.  A user creates a `BucketAccessRequest` (BAR) in the app's namespace (which is the same namespace as the `BucketRequest`).  A 'BucketAccessRequest' can specify *either* a ServiceAccount or a desired Secret name.  Specifying a ServiceAccount enables provisioners to support cloud provider identity integration with their respective Kubernetes offerings.
-
-**NOTE:** _Currently under review: we are discussing whether or not a BR is needed for any brownfield use-cases. We are considering BRs only apply to greenfield bucket creation (where a BAR is also needed), and that all brownfield accesses need only a BAR._
 
 ```yaml
 apiVersion: cosi.io/v1alpha1
@@ -280,30 +287,33 @@ metadata:
 spec:
   serviceAccountName: [3]
   accessSecretName: [4]
-  bucketInstanceName: [5]
+  bucketRequestName: [5]
   bucketAccessClassName: [6]
   bucketAccessName: [7]
 status:
-  phase: [8]
+  conditions: [8]
+    - Type: {AccessGranted} [9]
+      Status: [10]
+      Reason: [11]
+      Message: [12]
 ```
-
-**NOTE:** _Currently under review: if only a BAR is needed to grant brownfield access then we will need to add `protocol` to the BAR, and possibly to the BAC._
 
 1. `labels`: added by the controller.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
 1. `finalizers`: added by the controller to defer `BucketAccessRequest` deletion until backend deletion ops succeed.
 1. `serviceAccountName`: (optional) the name of a Kubernetes ServiceAccount in the same namespace.  This field is included to support cloud provider identity integration.  Should not be set when specifying `accessSecretName`.
 1. `accessSecretName`: (optional) the name of a Kubernetes Secret in the same namespace.  This field is used when there is not cloud provider identity integration.  Should not be set when specifying `serviceAccountName`.
-1. `bucketInstanceName`: The the name of the `Bucket` instance to which the user identity or ServiceAccount should be granted access to, according to the policies defined in the `BucketAccessClass`.
+1. `bucketRequestName`: the name of the `BucketRequest` associated with this access request. From the bucket request, COSI knows the `Bucket` instance and thus bucket and its properties.
 1. `bucketAccessClassName`: name of the `BucketAccessClass` specifying the desired set of policy actions to be set for a user identity or ServiceAccount.
 1. `bucketAccessName`: name of the bound cluster-scoped `BucketAccess` instance.
-1. `phase`: is the current state of the `BucketAccessRequest`:
-   - *Pending*: The controller has detected the new `BucketAccessRequest` and begun provisioning operations.
-   - *Bound*: Provisioning operations have completed and the `BucketAccessRequest` has been bound to a `BucketAccess`. It also indicated that the `BucketAccess` instance has been bound to the `Bucket`.
-   - *Released*: the Bucket is unbound and can potentially reused.
+1. `conditions`: the latest available observation of this `BucketAccessRequest`. (Phase is not used.)
+1. `Type`: only one type is supported: "AccessGranted". If the condition's `Status` is true then access to the bucket has been granted for the `Reason` provided. If `Status` is false then the bucket is unable to be accessed and, again, `Reason` states why.
+1. `Status`: one of true, false or unknown. If not specified then unknown is assumed. A true status indicates the this condition is true at the time of observation.
+1. `Reason`: one of "Bound", "Granting", "Revoking".
+1. `Message`: optional human readable message containing more details.
 
 #### BucketAccess
 
-A cluster-scoped administrative custom resource which encapsulates fields from the `BucketAccessRequest` (BAR) and the `BucketAccessClass` (BAC).  The purpose of the `BucketAccess` (BA) is to serve as communication path between provisioners and the central COSI controller.  In greenfield, the COSI controller creates `BucketAccess` instances for new `BucketAccessRequest`s.  There is one `BucketAccess` instance per `BucketAccessRequest`.
+A cluster-scoped administrative custom resource which encapsulates fields from the `BucketAccessRequest` (BAR) and the `BucketAccessClass` (BAC).  The purpose of the `BucketAccess` (BA) is to serve as communication path between provisioners and the central COSI controller.  In greenfield, the COSI controller creates `BucketAccess` instances for new `BucketAccessRequest`s. In brownfield the admin is expected to manually create the BA. There is one `BucketAccess` instance per `BucketAccessRequest`.
 
 ```yaml
 apiVersion: cosi.io/v1alpha1
@@ -322,7 +332,11 @@ metadata:
   provisioner: [7]
   parameters: [8]
  status:
-  phase: [9]
+  conditions: [9]
+    - Type: {AccessGranted} [10]
+      Status: [11]
+      Reason: [12]
+      Message: [13]
 ```
 
 1. `name`: For greenfield, generated in the pattern of `"bucketAccess-"<bucketAccessRequest.name>"-"<bucketAccessRequest.namespace>`. 
@@ -333,10 +347,11 @@ metadata:
 1. `  accessSecretName`: name of the provisioner generated Secret containing access credentials. This Secret exists in the provisioner’s namespace and must be copied to the app namespace by the COSI controller.
 1. `provisioner`:  name of the provisioner that should handle this `BucketAccess` instance.  Copied from the `BucketAccessClass`.
 1. `parameters`:  A map of string:string key values.  Allows admins to control user and access provisioning by setting provisioner key-values.
-1. `phase`: is the current state of the `BucketAccess`:
-   - *Pending*: The controller has detected the new `BucketAccessRequest` and begun provisioning operations.
-   - _Bound_: the controller finished processing the request and has bound the `BucketAccess` to the both the `BucketAccessRequest` and to the `Bucket`.
-   - _Released_: the originating Bucket has been deleted, signalling that the Bucket is ready for garbage collection.  This will occur on greenfield Buckets once all requests referencing the Bucket are deleted.
+1. `conditions`: the latest available observation of this `BucketAccess`. (Phase is not used.)
+1. `Type`: only one type is supported: "AccessGranted". If the condition's `Status` is true then the bucket is available to be accessed for the `Reason` provided. If `Status` is false then the bucket is unable to be accessed and, again, `Reason` states why.
+1. `Status`: one of true, false or unknown. If not specified then unknown is assumed. A true status indicates the this condition is true at the time of observation.
+1. `Reason`: one of "Available", "Bound", "Granting", "Revoking".  Note: "Available" indicates the `BucketAccess` was observed and its `conditions` was empty, which is expected when a brownfield `BucketAccess` is manually created.
+1. `Message`: optional human readable message containing more details.
 
 #### BucketAccessClass
 
@@ -426,8 +441,6 @@ Prep for brownfield:
 
 Here is the workflow:
 
-**NOTE:** _Currently under review: we are discussing whether or not a BR is needed for any brownfield use-cases. We are considering BRs only apply to greenfield bucket creation (where a BAR is also needed), and that all brownfield accesses need only a BAR. If this is accepted then the workflows will be updated._
-
 + COSI central controller detects a new `BucketRequest` (BR).
 + COSI central controller detects a new `BucketAccessRequest`(BAR).
 + COSI gets the `BR.BucketClass` (directly or via the matching default).
@@ -454,7 +467,7 @@ The user also needs to creates a `BucketAccessRequest` (BAR), which references t
 
 ![DeleteBucket Workflow](COSI%20Architecture_Delete%20Bucket%20Workflow.png)
 
-_Delete_ covers deleting a bucket and/or revoking access to a bucket. A `Bucket` delete is triggerd by the user deleting their `BucketRequest`. A `BucketAccess` removal is triggered by the user deleting their `BucketAccessRequest`. A bucket is not deleted if there are any bindings (accessors). Once all bindings have been removed the `Bucket`'s Phase is set to "Released", **and** if the release policy is "Delete", then the sidecar will gRPC call the provisioner's _Delete_ interface. It's up to each provisioner whether or not to physically delete bucket content, but the expectation is that the physical bukcet will at least be made unavailable.
+_Delete_ covers deleting a bucket and/or revoking access to a bucket. A `Bucket` delete is triggerd by the user deleting their `BucketRequest`. A `BucketAccess` removal is triggered by the user deleting their `BucketAccessRequest`. A bucket is not deleted if there are any bindings (accessors). Once all bindings have been removed the `Bucket`'s `conditions` is marked unavailable, **and** if the release policy is "Delete", then the sidecar will gRPC call the provisioner's _Delete_ interface. It's up to each provisioner whether or not to physically delete bucket content, but the expectation is that the physical bukcet will at least be made unavailable.
 
 Also, when the app pod terminates, the kubelet will gRPC call `NodeUnpublishVolume` which is received by the cosi-node-adapter. The adapter will ensure that the access granted to this pod is removed, and if this pod is the last accessor, then depending on the bucket's _releasePolicy_, the bucket may be deleted.
 
@@ -466,16 +479,15 @@ These are the common steps to delete a `Bucket`. Note: there are atypical workfl
 + User deletes their `BucketRequest` (BR) which "hangs" until finalizers have been removed and the BR can finally be deleted.
 + User deletes their `BucketAccessRequest` (BAR) which "hangs" until finalizers have been removed and the BAR can finally be deleted.
 + COSI central controller sees the BR.deleteTimestamp and the BAR.deleteTimestamp are set.
-+ COSI deletes the associated `Bucket`, which sets its deleteTimestamp but does not delete it due to finalizer, and its Phase remains "Bound" (presumably).
-+ COSI deletes the associated `BucketAccess` (BA), which sets its deleteTimestamp but does not delete it due to finalizer, and its Phase remains "Bound" (presumably).
++ COSI deletes the associated `Bucket`, which sets its deleteTimestamp but does not delete it due to finalizer.
++ COSI deletes the associated `BucketAccess` (BA), which sets its deleteTimestamp but does not delete it due to finalizer.
 + Sidecar sees the deleteTimestamp set in the `BucketAccess` and gRPC calls the provisoner's _Revoke_ interface.
 + COSI unbinds the BA from the `Bucket`.
 + COSI checks for additional binding references and if there are any we stop processing the BR delete (but continue processing the BAR delete).
-+ When all the binding references in the `Bucket` have been removed, COSI sets the `Bucket`'s Phase to "Released".
-+ Sidecar sees `Bucket.Phase` = "Released" and knows the `Bucket.releasePolicy`.
-+ If the release policy is "Delete", the sidecar gRPC calls the provisoner's _Delete_ interface, and upon successful completion, sets the `Bucket`'s Phase to "Deleted"
++ Sidecar sees `Bucket.conditions[x].Reason` = "Released" and knows the `Bucket.releasePolicy`.
++ If the release policy is "Delete", the sidecar gRPC calls the provisoner's _Delete_ interface, and upon successful completion, sets the `Bucket`'s `conditions[x].Reason to "Deleted"
 + If the release policy is "Retain" then the `Bucket` remains "Released" and it can potentially be reused.
-+ When the COSI controller sees the `Bucket`'s Phase is "Deleted", it deletes all the finalizers and the real deletions occur.
++ When the COSI controller sees the `Bucket`'s `conditions[x].Reason is "Deleted", it deletes all the finalizers and the real deletions occur.
 
 ---
 
