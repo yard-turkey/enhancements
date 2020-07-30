@@ -110,9 +110,9 @@ This proposal does _not_ include a standardized *protocol* or abstraction of sto
 
 ### Storage APIs
 
-#### BucketRequest (BR)
+#### BucketRequest
 
-A user facing, namespaced custom resource requesting a bucket endpoint. A `BucketRequest` lives in the app's namespace.  In addition to a `BucketRequest`, a [BucketAccessRequest](#bucketaccessrequest) is required in order to grant credentialed access to the bucket.
+A user facing, namespaced custom resource requesting a bucket endpoint. A `BucketRequest` (BR) lives in the app's namespace.  In addition to a `BucketRequest`, a [BucketAccessRequest](#bucketaccessrequest) is required in order to grant credentialed access to the bucket.
 
 ```yaml
 apiVersion: cosi.io/v1alpha1
@@ -226,9 +226,9 @@ status:
    - *Released*: the Bucket is unbound and can potentially reused.
    - *Deleted*: the physical bucket has been deleted and the `Bucket` is about to be removed.
 
-#### BucketClass (BC)
+#### BucketClass
 
-A cluster-scoped custom resource to provide admins control over the handling of greenfield bucket provisioning.  The `BucketClass` defines a release policy, specifies driver specific parameters, and provides the provisioner name. A default bucket class can be defined for each supported protocol, which allows the bucket class to be omitted from a `BucketRequest`. Most of the `BucketClass` fields are copied to the generated (greenfield) `Bucket` instance.
+A cluster-scoped custom resource to provide admins control over the handling of greenfield bucket provisioning.  The `BucketClass` (BC) defines a release policy, specifies driver specific parameters, and provides the provisioner name. A default bucket class can be defined for each supported protocol, which allows the bucket class to be omitted from a `BucketRequest`. Most of the `BucketClass` fields are copied to the generated (greenfield) `Bucket` instance.
 
 > Note: Bucket classes are not used for brownfield provisioning. Instead, an admin manually creates a `Bucket` and the user references this `Bucket` in their `BucketRequest.bucketInstanceName`.
 
@@ -261,9 +261,9 @@ parameters: [6]
 
 The Access APIs abstract the backend policy system.  Access policy and user identities are an integral part of most object stores.  As such, a system must be implemented to manage both user/credential creation and the binding of those users to individual buckets via policies.  Object stores differ from file and block storage in how they manage users, with cloud providers typically integrating with an IAM platform.  This API includes support for cloud platform identity integration with Kubernetes ServiceAccounts.  On-prem solutions usually provide their own user management systems, which may look very different from each other and from IAM platforms.  We must also account for third party authentication solutions that may be integrated with an on-prem service.
 
-#### BucketAccessRequest (BAR)
+#### BucketAccessRequest
 
-A user namespaced custom resource representing an object store user and an access policy defining the user’s relation to a storage instance.  A user creates a `BucketAccessRequest` in the app's namespace (which is the same namespace as the `BucketRequest`).  A 'BucketAccessRequest' can specify *either* a ServiceAccount or a desired Secret name.  Specifying a ServiceAccount enables provisioners to support cloud provider identity integration with their respective Kubernetes offerings.
+A user namespaced custom resource representing an object store user and an access policy defining the user’s relation to a storage instance.  A user creates a `BucketAccessRequest` (BAR) in the app's namespace (which is the same namespace as the `BucketRequest`).  A 'BucketAccessRequest' can specify *either* a ServiceAccount or a desired Secret name.  Specifying a ServiceAccount enables provisioners to support cloud provider identity integration with their respective Kubernetes offerings.
 
 ```yaml
 apiVersion: cosi.io/v1alpha1
@@ -297,9 +297,9 @@ status:
    - *Bound*: Provisioning operations have completed and the `BucketAccessRequest` has been bound to a `BucketAccess`. It also indicated that the `BucketAccess` instance has been bound to the `Bucket`.
    - *Released*: the Bucket is unbound and can potentially reused.
 
-#### BucketAccess (BA)
+#### BucketAccess
 
-A cluster-scoped administrative API which encapsulates fields from the `BucketAccessRequest` and the `BucketAccessClass`.  The purpose of the API is to serve as communication path between provisioners and the central COSI controller.  In greenfield, the COSI controller creates `BucketAccess` instances for new `BucketAccessRequest`s.  There is one `BucketAccess` instance per `BucketAccessRequest`.
+A cluster-scoped administrative custom resource which encapsulates fields from the `BucketAccessRequest` (BAR) and the `BucketAccessClass` (BAC).  The purpose of the `BucketAccess` (BA) is to serve as communication path between provisioners and the central COSI controller.  In greenfield, the COSI controller creates `BucketAccess` instances for new `BucketAccessRequest`s.  There is one `BucketAccess` instance per `BucketAccessRequest`.
 
 ```yaml
 apiVersion: cosi.io/v1alpha1
@@ -334,9 +334,9 @@ metadata:
    - _Bound_: the controller finished processing the request and has bound the `BucketAccess` to the both the `BucketAccessRequest` and to the `Bucket`.
    - _Released_: the originating Bucket has been deleted, signalling that the Bucket is ready for garbage collection.  This will occur on greenfield Buckets once all requests referencing the Bucket are deleted.
 
-#### BucketAccessClass (BAC)
+#### BucketAccessClass
 
-A cluster-scoped admin custom resource providing a way for admins to specify policies that may be used to access buckets.  These are always applicable in greenfield, where access is dynamically granted, and only sometimes applicable in brownfield, where a user's identity may already exist, but not yet have access to a bucket.  In this case, a `BucketAccessRequest` will still specify the `BucketAccessClass` in order to determine which actions it is granted.
+A cluster-scoped custom resource providing a way for admins to specify policies that may be used to access buckets.  A `BucketAccessClass` (BAC) is always applicable in greenfield, where access is dynamically granted, and only sometimes applicable in brownfield, where a user's identity may already exist, but not yet have access to a bucket.  In this case, a `BucketAccessRequest` will still specify the `BucketAccessClass` in order to determine which actions it is granted.
 
 ```yaml
 apiVersion: cosi.io/v1alpha1
