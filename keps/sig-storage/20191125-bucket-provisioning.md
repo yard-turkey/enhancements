@@ -475,7 +475,6 @@ These are the common steps to delete a `Bucket`. Note: there are atypical workfl
 ## Provisioner Secrets
 
 Per [Non-Goals](#non-goals), it is not within the scope of the proposal to abstract IAM operations.  Instead, provisioner and user credentials should be provided to automation by admins or users.  
-
 To allow for flexibility in authorizing provisioner operations, credentials may be provided to the provisioner in several ways.
 
 - **Per Provisioner:** the Secret is used for all provisioning operations, for the lifetime of the provisioner.  These Secrets should be injected directly into the provisioner's container via [common Kubernetes patterns](https://kubernetes.io/docs/tasks/inject-data-application/distribute-credentials-secure/).
@@ -513,353 +512,137 @@ cosi.io/provisioner-secret-namespace:
 
 ## gRPC Definitions
 
-```protobuf
- syntax = "proto3";
+There is one service defined by COSI - `Provisioner`. This will need to be satisfied by the vendor-provisioner in order to be COSI-compatible
 
- package cosi.v1;
+```
+service Provisioner {
+    rpc ProvisionerGetInfo (ProvisionerGetInfoRequest) returns (ProvisionerGetInfoResponse) {}
 
- import "google/protobuf/descriptor.proto";
+    rpc ProvisionerCreateBucket (ProvisionerCreateBucketRequest) returns (ProvisionerCreateBucketResponse) {}
+    rpc ProvisionerDeleteBucket (ProvisionerDeleteBucketRequest) returns (ProvisionerDeleteBucketResponse) {}
 
- option go_package = "github.com/container-object-store-interface/go-cosi";
+    rpc ProvisionerGrantBucketAccess (ProvisionerGrantBucketAccessRequest) returns (ProvisionerGrantBucketAccessResponse);
+    rpc ProvisionerRevokeBucketAccess (ProvisionerRevokeBucketAccessRequest) returns (ProvisionerRevokeBucketAccessResponse);
+}
+```
 
- extend google.protobuf.MessageOptions {
+#### ProvisionerGetInfo
 
-     // cosi_secret should be used to designate messages containing sensitive data
-     //             to provide protection against that data being logged or otherwise leaked.
-     bool cosi_secret = 1000;
- }
+This call is meant to retrieve the unique provisioner Identity. This identity will have to be set in `BucketRequest.Provisioner` field in order to invoke this specific provisioner.
 
- message DriverInfoRequest {
-     // INTENTIONALLY BLANK
- }
-
- // DataProtocol defines a set of constants used in Create and Grant requests.
- enum DataProtocol {
-     PROTOCOL_UNSPECIFIED = 0;
-     AZURE_BLOB = 1;
-     GCS = 2;
-     S3 = 3;
- }
-
- // AccessMode defines a common set of permissions among object stores
- enum AccessMode {
-     MODE_UNSPECIFIED = 0;
-     RO = 1;
-     WO = 2;
-     RW = 3;
- }
-
- // S3SignatureVersion defines the 2 supported versions of S3's authentication
- enum S3SignatureVersion {
-     VERSION_UNSPECIFIED = 0;
-     V2 = 1;
-     V4 = 2;
- }
-
- message DriverInfoResponse {
-     // DriverName
-     string DriverName = 1;
-
-     // SupportedProtocol
-     DataProtocol SupportedProtocol = 2;
-
-     // NextId = 3;
- }
- 
- message S3Context {
-     // returns the location where bucket will be created
-     string location = 1
- }
-
-message GCSContext {
-   // returns the location where bucket is created
-   string location = 1
-   // returns the project the bucket belongs to
-   string project = 2
+```
+message ProvisionerGetInfoRequest {
+    // Intentionally left blank
 }
 
-message AzureContext {
+message ProvisionerGetInfoResponse {    
+    string provisioner_identity = 1;
 }
+```
 
-message GenericContext {
-     // generic output content
-     map<string, string> bucket_data
-}
+#### ProvisonerCreateBucket
 
-message ProviderContext {
-     oneof {
-          S3Context
-          GCSContext
-          AzureContext
-          GenericContext
-     }
-}
+This call is made to create the bucket in the backend. If the bucket already exists, then the appropriate error code `ALREADY_EXISTS` must be returned by the provisioner.
 
-message Bucket {
-  // Name is the name of the bucket
-  string name = 1
-  // provisioner used to create and other bucket operations
-  // ProjectName this bucket created under
-  ProviderContext provider_context = 2 //- { azure_context, gcs_context, s3_context, generic_context}
-  string provisioner = 3
-  // access mode
-  AccessMode access_mode = 4;
+```
+message ProvisionerCreateBucketRequest {    
+    string bucket_name = 1;
+
+    string region = 2;
+
+    string zone = 3;
+
+    map<string,string> bucket_context = 4;
+
+    enum AnonymousBucketAccessMode {
+	BUCKET_PRIVATE = 0;
+	BUCKET_READ_ONLY = 1;
+	BUCKET_WRITE_ONLY = 2;
+	BUCKET_READ_WRITE = 3;
+    }
     
+    AnonymousBucketAccessMode anonymous_bucket_access_mode = 5;
+
+    map<string,string> secrets = 6;
 }
 
-### Create
- message CreateBucketRequest {
-     // bucket_name, This field is REQUIRED.
-     // Maintain Idempotency. 
-     //    In the case of error, the CO MUST handle the gRPC error codes
-     //    per the recovery behavior defined in the "CreateBucket Errors"
-     //    section below.
-     // BucketRequest:name 
-     string bucket_name = 1;
+message ProvisionerCreateBucketResponse {
+    // Intentionally left blank
+}
+```
 
-     // RequestProtocol, one of the predefined values
-     // Driver must check the protocol used to match 
-     // BucketClass:supportedProtocol - {"azureblob", "gcs", "s3", ... } [3]
-     // BucketRequest:protocol - use this as request protocol but check 
-     // if the protocol is in the BucketClass' suppportedProtocol
-     DataProtocol request_protocol = 2;
+#### ProvisonerDeleteBucket
 
-     // DriverParameters, these are parameters that are extracted from 
-     // BuckerRequest and BucketClass so that the call has context.
-     // For example GCS require projectName for CreateBucket to succeed.
-     // BucketClass:provisioner - identify the  
-     // projectID if GCS
-     ProviderContext provider_context = 3 //- { azure_context, gcs_context, s3_context, generic_context}
-     map<string, string> driver_parameters = 4;  
+This call is made to delete the bucket in the backend. If the bucket has already been deleted, then no error should be returned.
 
-     // AccessMode is requested as RO, RW, WO and depends on driver.
-     // If driver supports access mode if not ignores it
-     // BucketClass:accessMode - {"ro", "wo", "rw"} [4]
-     AccessMode access_mode = 5;
-
-     // Information required to make createBucket call. This field is REQUIRED
-     // A series of tokens, user name, etc based on protocol choice
-     // BucketRequest:secretName will provide necessary security token to
-     // connect to the provider API.  
-     // Azure:
-     //    message AuthenticationData {
-     //        option (cosi_secret) = true;
-     //        string StorageAccountName = 1;
-     //        string AccountKey = 2;
-     //        string SasToken = 3;
-     //    }
-     // GCS:
-     //    message AuthenticationData {
-     //        option (cosi_secret) = true;
-     //        string StorageAccountName = 1;
-     //        string PrivateKeyName = 2;
-     //        string PrivateKey = 3;
-     //    }
-     // S3:
-     //    message AuthenticationData {
-     //        option (cosi_secret) = true;
-     //        string AccessKeyId = 1;
-     //        string SecretKey = 2;
-     //        string StsToken = 3;
-     //        string UserName = 4;
-     //    }
-     map<string, string> secrets = 6;
- }
-
-
-CREATE_INVALID_ARGUMENT    : validation of the input argument fails 
-CREATE_INVALID_PROTOCOL    : driver does not support the protocol
-CREATE_ALREADY_EXISTS      : resource already exists 
-CREATE_INVALID_CREDENTIALS : resource creation failed due to invalid credentials 
-CREATE_INTERNAL_ERROR      : Failed to execute the requested call
-
- message CreateBucketResponse {
-     // Bucket returned
-     Bucket bucket
- }
- 
-### Delete
- message DeleteBucketRequest {
-     // The name of the bucket to be deleted.
-     // This field is REQUIRED.
-     string bucket_name = 1;
+```
+message ProvisionerDeleteBucketRequest {
+    string bucket_name = 1;
     
-     // RequestProtocol, one of the predefined values
-     // Driver must check the protocol used to match 
-     // BucketClass:supportedProtocol - {"azureblob", "gcs", "s3", ... } [3]
-     // BucketRequest:protocol - use this as request protocol but check 
-     // if the protocol is in the BucketClass' suppportedProtocol
-     DataProtocol request_protocol = 2;
+    string region = 2;
 
-     // DriverParameters, these are parameters that are extracted from 
-     // BuckerRequest and BucketClass so that the call has context.
-     // For example GCS require projectName for CreateBucket to succeed.
-     // BucketClass:provisioner - identify the  
-     // projectID if GCS
-     ProviderContext provider_context = 3 - { azure_context, gcs_context, s3_context, generic_context}
-     map<string, string> driver_parameters = 4; //provider_context
-  
-     // Secrets required by driver to complete bucket deletion request.
-     // This field is OPTIONAL. Refer to the `Secrets Requirements`
-     // section on how to use this field.
-     // Azure:
-     //    message AuthenticationData {
-     //        option (cosi_secret) = true;
-     //        string StorageAccountName = 1;
-     //        string AccountKey = 2;
-     //        string SasToken = 3;
-     //    }
-     // GCS:
-     //    message AuthenticationData {
-     //        option (cosi_secret) = true;
-     //        string StorageAccountName = 1;
-     //        string PrivateKeyName = 2;
-     //        string PrivateKey = 3;
-     //    }
-     // S3:
-     //    message AuthenticationData {
-     //        option (cosi_secret) = true;
-     //        string AccessKeyId = 1;
-     //        string SecretKey = 2;
-     //        string StsToken = 3;
-     //        string UserName = 4;
-     //    }
-     map<string, string> secrets = 5
+    string zone = 3;
+
+    map<string,string> bucket_context = 4;    
 }
 
-
-
- message DeleteBucketResponse {
-     // INTENTIONALLY BLANK
- }
-
-DELETE_BUCKET_DOESNOT_EXIST : Bucket specified does not exist 
-DELETE_DELETE_INPROGRESS    : Delete bucket is in progress
-DELETE_INVALID_CREDENTIALS  : resource deletion failed due to invalid credentials
-DELETE_INTERNAL_ERROR       : Failed to execute the requested call
-DELETE_INVALID_ARGUMENT     : validation of the input argument fails 
-
-
-
-service CosiController {
-  rpc CreateBucket (CreateBucketRequest)
-    returns (CreateBucketResponse) {}
-
-  rpc DeleteBucket (DeleteBucketRequest)
-    returns (DeleteBucketResponse) {}
+message ProvisionerDeleteBucketResponse {
+     // Intentionally left blank
 }
+```
 
+#### ProvisionerGrantBucketAccess
 
- message S3Credentials {
-      string id = 1 // one of id, emailid, uri
-      string permission = 1
-      string owner
- }
+This call grants access to a particular principal. Note that the principal is the account for which this access should be granted. 
 
-message GCSCredentials {
-     string entity = 1 //one ot userid, emailid, groupid, etc or 'allusers/allAuthenticatedUsers
-     string role = 2
-     string domain = 3
-     string project = 4
-}
+If the principal is set, then it should be used as the username of the created credentials or in someway should be deterministically used to generate a new credetial for this request. This principal will be used as the unique identifier for deleting this access by calling ProvisionerRevokeBucketAccess
 
-message AzureCredentials {
-     string id
-     string permission
-}
+If the `principal` is empty, then a new service account should be created in the backend that satisfies the requested `access_policy`. The username/principal for this service account should be set in the `principal` field of `ProvisionerGrantBucketAccessResponse`.
 
-message GenericCredentials {
-     // generic output content
-     map<string, string> credentials
-}
-
-message ProviderCredentials {
-     oneof {
-          S3Credentials
-          GCSCredentials
-          AzureCredentials
-          GenericCredentials
-     }
-}
-
-
- message GrantBucketAccessRequest {
-     // The name of the bucket to be granted access.
-     // This field is REQUIRED.
-     string bucket_name = 1;
+```
+message ProvisionerGrantBucketAccessRequest {
+    string bucket_name = 1;
     
-     // RequestProtocol, one of the predefined values
-     // Driver must check the protocol used to match 
-     // BucketClass:supportedProtocol - {"azureblob", "gcs", "s3", ... } [3]
-     // BucketRequest:protocol - use this as request protocol but check 
-     // if the protocol is in the BucketClass' suppportedProtocol
-     DataProtocol request_protocol = 2;
+    string region = 2;
 
-     // permission granted
-     map<string,string> permissions = 3 
-     
-     // provisioner used to create and other bucket operations
-     // ProjectName this bucket created under
-     ProviderContext provider_context = 4 - { azure_context, gcs_context, s3_context, generic_context}
-     
-     map<string,string> secrets
- }
+    string zone = 3;
 
- message GrantBucketAccessResponse {
-     // No data returned by this call other than error or success code
-     repeated ProviderCredentials creds
- }
- 
- 
-GRANT_BUCKET_DOESNOT_EXIST : Bucket specified does not exist 
-GRANT_INVALID_CREDENTIALS  : resource deletion failed due to invalid credentials
-GRANT_INTERNAL_ERROR       : Failed to execute the requested call
-GRANT_INVALID_ARGUMENT     : validation of the input argument fails
-GRANT_INVALID_PRINCIPAL    : Failed to grant, principal provided is invalid 
- 
- 
+    map<string,string> bucket_context = 4;  
 
- message RevokeBucketAccessRequest {
-     // The name of the bucket to be granted access.
-     // This field is REQUIRED.
-     string bucket_name = 1;
+    string principal = 5;
     
-     // RequestProtocol, one of the predefined values
-     // Driver must check the protocol used to match 
-     // BucketClass:supportedProtocol - {"azureblob", "gcs", "s3", ... } [3]
-     // BucketRequest:protocol - use this as request protocol but check 
-     // if the protocol is in the BucketClass' suppportedProtocol
-     DataProtocol request_protocol = 2;
-
-     // the service_account from which permissions are revoked
-     ProviderCredentials service_account
-
-     // permission revoked
-     map<string,string> permissions = 3 
-     
-     // provisioner used to create and other bucket operations
-     // ProjectName this bucket created under
-     ProviderContext provider_context = 4 - { azure_context, gcs_context, s3_context, generic_context}
-     
-     map<string,string> secrets
-     
- }
-
- message RevokeBucketAccessResponse {
-     // No data returned by this call other than error or success code
-     repeated ProviderCredentials creds    
- }
-
-REVOKE_BUCKET_DOESNOT_EXIST : Bucket specified does not exist 
-REVOKE_INVALID_CREDENTIALS  : resource deletion failed due to invalid credentials
-REVOKE_INTERNAL_ERROR       : Failed to execute the requested call
-REVOKE_INVALID_ARGUMENT     : validation of the input argument fails
-REVOKE_INVALID_PRINCIPAL    : Failed to grant, principal provided is invalid 
-
-
-
- service CosiController {
-     rpc GrantBucketAccess (GrantBucketAccessRequest) returns (GrantBucketAccessResponse);
-     rpc RevokeBucketAccess (RevokeBucketAccessRequest) returns (RevokeBucketAccessResponse);
+    string access_policy = 6;
 }
 
+message ProvisionerGrantBucketAccessResponse {
+    // This is the account that is being provided access. This will
+    // be required later to revoke access. 
+    string principal = 1;
+    
+    string credentials_file_contents = 2;
+    
+    string credentials_file_path = 3;
+} 
+```
+
+#### ProvisionerRevokeBucketAccess
+
+This call revokes all access to a particular bucket from a principal.  
+
+```
+message ProvisionerRevokeBucketAccessRequest {
+    string bucket_name = 1;
+    
+    string region = 2;
+
+    string zone = 3;
+
+    map<string,string> bucket_context = 4;  
+
+    string principal = 5;
+}
+
+message ProvisionerRevokeBucketAccessResponse {
+    // Intentionally left blank
+}
+```
