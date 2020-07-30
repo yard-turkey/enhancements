@@ -49,9 +49,7 @@ status: provisional
     - [Create](#create)
     - [Delete](#delete)
   - [Provisioner Secrets](#provisioner-secrets)
-  - [gRPC](#grpc)
-    - [Create](#create)
-    - [Delete](#delete)
+  - [gRPC Definitions](#grpc_definitions)
 <!-- /toc -->
 # Summary
 
@@ -112,7 +110,9 @@ This proposal does _not_ include a standardized *protocol* or abstraction of sto
 
 #### BucketRequest
 
-A user facing, namespaced custom resource requesting a bucket endpoint. A `BucketRequest` (BR) lives in the app's namespace.  In addition to a `BucketRequest`, a [BucketAccessRequest](#bucketaccessrequest) is required in order to grant credentialed access to the bucket.
+A user facing, namespaced custom resource requesting a bucket endpoint. A `BucketRequest` (BR) lives in the app's namespace.  In addition to a `BucketRequest`, a [BucketAccessRequest](#bucketaccessrequest) is required in order to grant credentialed access to the bucket. 
+
+**NOTE:** _Currently under review: we are discussing whether or not a BR is needed for any brownfield use-cases. We are considering BRs only applies to greenfield bucket creation (where a BAR is also needed), and that all brownfield accesses need only a BAR._
 
 ```yaml
 apiVersion: cosi.io/v1alpha1
@@ -265,6 +265,8 @@ The Access APIs abstract the backend policy system.  Access policy and user iden
 
 A user namespaced custom resource representing an object store user and an access policy defining the user’s relation to a storage instance.  A user creates a `BucketAccessRequest` (BAR) in the app's namespace (which is the same namespace as the `BucketRequest`).  A 'BucketAccessRequest' can specify *either* a ServiceAccount or a desired Secret name.  Specifying a ServiceAccount enables provisioners to support cloud provider identity integration with their respective Kubernetes offerings.
 
+**NOTE:** _Currently under review: we are discussing whether or not a BR is needed for any brownfield use-cases. We are considering BRs only applies to greenfield bucket creation (where a BAR is also needed), and that all brownfield accesses need only a BAR._
+
 ```yaml
 apiVersion: cosi.io/v1alpha1
 kind: BucketAccessRequest
@@ -320,6 +322,7 @@ metadata:
  status:
   phase: [9]
 ```
+**NOTE:** _if we decide to not require a BR for brownfield bucket access, then the BAR will need `protocol` added_if we decide to not require a BR for brownfield bucket access, then the BAR will need `protocol` added_.
 
 1. `name`: For greenfield, generated in the pattern of `"bucketAccess-"<bucketAccessRequest.name>"-"<bucketAccessRequest.namespace>`. 
 1. `labels`: added by the controller.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
@@ -421,6 +424,9 @@ Prep for brownfield:
 + note that a `BucketClass` is not used for brownfield.
 
 Here is the workflow:
+
+**NOTE:** _Currently under review: we are discussing whether or not a BR is needed for any brownfield use-cases. We are considering BRs only applies to greenfield bucket creation (where a BAR is also needed), and that all brownfield accesses need only a BAR. If this is accepted then the workflows will be updated._
+
 + COSI central controller detects a new `BucketRequest` (BR).
 + COSI central controller detects a new `BucketAccessRequest`(BAR).
 + COSI gets the `BR.BucketClass` (directly or via the matching default).
