@@ -566,11 +566,8 @@ This call is made to create the bucket in the backend. If the bucket already exi
 
 ```
 message ProvisionerCreateBucketRequest {    
+    // This field is REQUIRED
     string bucket_name = 1;
-
-    string region = 2;
-
-    string zone = 3;
 
     map<string,string> bucket_context = 4;
 
@@ -582,8 +579,6 @@ message ProvisionerCreateBucketRequest {
     }
     
     AnonymousBucketAccessMode anonymous_bucket_access_mode = 5;
-
-    map<string,string> secrets = 6;
 }
 
 message ProvisionerCreateBucketResponse {
@@ -597,12 +592,9 @@ This call is made to delete the bucket in the backend. If the bucket has already
 
 ```
 message ProvisionerDeleteBucketRequest {
+    // This field is REQUIRED
     string bucket_name = 1;
     
-    string region = 2;
-
-    string zone = 3;
-
     map<string,string> bucket_context = 4;    
 }
 
@@ -621,16 +613,14 @@ If the `principal` is empty, then a new service account should be created in the
 
 ```
 message ProvisionerGrantBucketAccessRequest {
+    // This field is REQUIRED
     string bucket_name = 1;
     
-    string region = 2;
-
-    string zone = 3;
-
     map<string,string> bucket_context = 4;  
 
     string principal = 5;
     
+    // This field is REQUIRED
     string access_policy = 6;
 }
 
@@ -651,14 +641,12 @@ This call revokes all access to a particular bucket from a principal.
 
 ```
 message ProvisionerRevokeBucketAccessRequest {
+    // This field is REQUIRED
     string bucket_name = 1;
     
-    string region = 2;
-
-    string zone = 3;
-
     map<string,string> bucket_context = 4;  
 
+    // This field is REQUIRED
     string principal = 5;
 }
 
