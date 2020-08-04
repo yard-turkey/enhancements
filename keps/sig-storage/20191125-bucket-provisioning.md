@@ -110,7 +110,7 @@ This proposal does _not_ include a standardized *protocol* or abstraction of sto
 
 #### BucketRequest
 
-A user facing, namespaced custom resource requesting a bucket endpoint. A `BucketRequest` (BR) lives in the app's namespace.  In addition to a `BucketRequest`, a [BucketAccessRequest](#bucketaccessrequest) is necessary in order to grant credentialed access to the bucket. BRs are required for bo th greenfield and brownfield uses.
+A user facing, namespaced custom resource requesting a bucket endpoint. A `BucketRequest` (BR) lives in the app's namespace.  In addition to a `BucketRequest`, a [BucketAccessRequest](#bucketaccessrequest) is necessary in order to grant credentials to access the bucket. BRs are required for both greenfield and brownfield uses.
 
 ```yaml
 apiVersion: cosi.io/v1alpha1
@@ -168,9 +168,6 @@ spec:
   provisioner: [4]
   releasePolicy: [5]
   anonymousAccessMode: [6]
-    - private
-    - publicRead
-    - publicReadWrite
   bucketClassName: [7]
   bindings: [8]
     - "<BucketAccess.name>"
@@ -201,7 +198,7 @@ status:
       Message: [16]
 ```
 
-1. `name`: When created by COSI, the `Bucket` name is generated in this format: _"bucket-"<bucketRequest.name>"-"<bucketRequest.namespace>_. If an admin creates a `Bucket`, as is necessary for brownfield access, they can use any name.
+1. `name`: When created by COSI, the `Bucket` name is generated in this format: _<bucketRequest.namespace>"-"<bucketRequest.name>_. If an admin creates a `Bucket`, as is necessary for brownfield access, they can use any name.
 2. `labels`: added by the controller.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
 3. `finalizers`: added by the controller to defer `Bucket` deletion until backend deletion ops succeed.
 4. `provisioner`: The provisioner field as defined in the `BucketClass`.  Used by sidecars to filter `Bucket`s. Format: <provisioner-namespace>"/"<provisioner-name>, eg "ceph-rgw-provisoning/ceph-rgw.cosi.ceph.com".
@@ -210,11 +207,11 @@ status:
    - _Delete_: the bucket and its contents are destroyed.
 > Note: the `Bucket`'s release policy is set to "Retain" as a default. Exercise caution when using the "Delete" release policy as the bucket content will be deleted.
 > Note: a `Bucket` is not deleted if it is bound to any `BucketRequest`s.
-6. `anonymousAccessMode`:  ACL specifying *uncredentialed* access to the Bucket.  This is applicable to cases where the storage instance or objects are intended to be publicly readable and/or writable.  Accepted values:
-   - `private`: Default, disallow uncredentialed access to the storage instance.
-   - `ro`: Read only, uncredentialed users can call ListBucket and GetObject.
-   - `rw`: Read/Write, same as `ro` with the addition of PutObject being allowed.
-   - `wo`: Write only, uncredentialed users can only call PutObject.
+6. `anonymousAccessMode`: a string specifying *uncredentialed* access to the Bucket.  This is applicable to cases where the storage instance or objects are intended to be publicly readable and/or writable. One of:
+   - "private": Default, disallow uncredentialed access to the storage instance.
+   - "publicReadOnly": Read only, uncredentialed users can call ListBucket and GetObject.
+   - "publicWriteOnly": Write only, uncredentialed users can only call PutObject.
+   - "publicReadWrite": Read/Write, same as `ro` with the addition of PutObject being allowed.
 > Note: does not reflect or alter the backing storage instances' ACLs or IAM policies.
 7. `bucketClassName`: Name of the associated bucket class (greenfield only).
 8. `bindings`: an array of `BucketAccess.name`(s). If the list is empty then there are no bindings (accessors) to this `Bucket` instance and the `Bucket` can potentially be deleted.
@@ -245,7 +242,7 @@ metadata:
 provisioner: [1]
 isDefaultBucketClass: [2]
 protocol: {"azureblob", "gcs", "s3", ... } [3]
-anonymousAccessMode: {"ro", "wo", "rw"} [4]
+anonymousAccessMode: [4]
 releasePolicy: {"Delete", "Retain"} [5]
 allowedNamespaces: [6]
   - name:
@@ -257,7 +254,11 @@ parameters: [7]
 2. `isDefaultBucketClass`: (optional) boolean, default is false. If set to true then potentially a `BucketRequest` does not need to specify a `BucketClass`. If the greenfield `BucketRequest` omits the `BucketClass` and a default `BucketClass`'s protocol matches the `BucketRequest`'s protocol then the default bucket class is used.
 3. `protocol`: (required) protocol supported by the associated object store. This field validates that the `BucketRequest`'s desired protocol is supported.
 > Note: if an object store supports more than one protocol then the admin should create a `BucketClass` per protocol.
-4. `anonymousAccessMode`: (optional) ACL specifying *uncredentialed* access to the Bucket.  This is applicable for cases where the storage instance or objects are intended to be publicly readable and/or writable.
+4. `anonymousAccessMode`: (optional) a string specifying *uncredentialed* access to the Bucket.  This is applicable for cases where the storage instance or objects are intended to be publicly readable and/or writable. One of:
+   - "private": Default, disallow uncredentialed access to the storage instance.
+   - "publicReadOnly": Read only, uncredentialed users can call ListBucket and GetObject.
+   - "publicWriteOnly": Write only, uncredentialed users can only call PutObject.
+   - "publicReadWrite": Read/Write, same as `ro` with the addition of PutObject being allowed.
 5. `releasePolicy`: defines bucket retention for greenfield `BucketRequest` deletes. **
    - _Retain_: (default) the `Bucket` and its data are preserved. The `Bucket` can potentially be reused.
    - _Delete_: the bucket and its contents are destroyed.
@@ -339,7 +340,7 @@ metadata:
       Message: [13]
 ```
 
-1. `name`: For greenfield, generated in the pattern of `"bucketAccess-"<bucketAccessRequest.name>"-"<bucketAccessRequest.namespace>`. 
+1. `name`: For greenfield, generated in the pattern of `<bucketAccessRequest.namespace>"-"<bucketAccessRequest.name>`. 
 1. `labels`: added by the controller.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
 1. `finalizers`: added by the controller to defer `BucketAccess` deletion until backend deletion ops succeed.
 1. `bucketAccessRequestName`/`bucketAccessRequestNamespace`: name and namespace of the bound `BucketAccessRequest`
