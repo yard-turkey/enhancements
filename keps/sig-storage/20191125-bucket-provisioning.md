@@ -302,7 +302,7 @@ status:
 1. `labels`: added by the controller.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
 1. `finalizers`: added by the controller to defer `BucketAccessRequest` deletion until backend deletion ops succeed.
 1. `serviceAccountName`: (optional) the name of a Kubernetes ServiceAccount in the same namespace.  This field is included to support cloud provider identity integration.  Should not be set when specifying `accessSecretName`.
-1. `accessSecretName`: (optional) the name of a Kubernetes Secret in the same namespace.  This field is used when there is not cloud provider identity integration.  Should not be set when specifying `serviceAccountName`.
+1. `accessSecretName`: (optional) the name of a Kubernetes Secret in the same namespace.  This field is used when there is no cloud provider identity integration.  Should not be set when specifying `serviceAccountName`.
 1. `bucketRequestName`: the name of the `BucketRequest` associated with this access request. From the bucket request, COSI knows the `Bucket` instance and thus bucket and its properties.
 1. `bucketAccessClassName`: name of the `BucketAccessClass` specifying the desired set of policy actions to be set for a user identity or ServiceAccount.
 1. `bucketAccessName`: name of the bound cluster-scoped `BucketAccess` instance.
@@ -314,7 +314,7 @@ status:
 
 #### BucketAccess
 
-A cluster-scoped administrative custom resource which encapsulates fields from the `BucketAccessRequest` (BAR) and the `BucketAccessClass` (BAC).  The purpose of the `BucketAccess` (BA) is to serve as communication path between provisioners and the central COSI controller.  In greenfield, the COSI controller creates `BucketAccess` instances for new `BucketAccessRequest`s. In brownfield the admin is expected to manually create the BA. There is one `BucketAccess` instance per `BucketAccessRequest`.
+A cluster-scoped administrative custom resource which encapsulates fields from the `BucketAccessRequest` (BAR) and the `BucketAccessClass` (BAC).  The purpose of the `BucketAccess` (BA) is to serve as communication path between provisioners and the central COSI controller.  In greenfield, the COSI controller creates `BucketAccess` instances for new `BucketAccessRequest`s. In brownfield the admin is expected to manually create the BA. There is a 1:1 mapping between `BucketAccess` and `BucketAccessRequest` instances.
 
 ```yaml
 apiVersion: cosi.io/v1alpha1
@@ -455,10 +455,10 @@ Here is the workflow:
 + COSI sees the completed BA which triggers binding the BA in `Bucket`.
 
 + Depending on when the app pod was started, the kubelet call `NodePublishVolume` and waits for the response from the cosi-node-adapter.
-+ The cois-node-adaper sees the `NodePublishVolume` request and is passed the `BucketRequest` and `BucketAccessRequest` names and namespace.
++ The cosi-node-adaper sees the `NodePublishVolume` request and is passed the `BucketRequest` and `BucketAccessRequest` names and namespace.
 + The adapter gets the corresponding `Bucket` and `BucketAccess` instances, and verifies that the BA has been bound.
 + The adapter creates the host files for the secret and endpoint info.
-+ At this point the adapter responds to the `NodePublishVolue` request and the kubelet continues to launch the pod
++ At this point the adapter responds to the `NodePublishVolume` request and the kubelet continues to launch the pod
 
 ##### Sharing Dynamically Created Buckets (green-brown)
 Once a `Bucket` is created, it is discoverable by other users in the cluster (who have been granted the ability to list `Bucket`s or via non-automated methods).  In order to access the `Bucket`, a user must create a `BucketRequest` (BR) that specifies the `Bucket` instance by name. This `BucketRequest` should not specify a `BucketClass` since the `Bucket` instance already exists.
@@ -468,7 +468,7 @@ The user also needs to creates a `BucketAccessRequest` (BAR), which references t
 
 ![DeleteBucket Workflow](COSI%20Architecture_Delete%20Bucket%20Workflow.png)
 
-_Delete_ covers deleting a bucket and/or revoking access to a bucket. A `Bucket` delete is triggerd by the user deleting their `BucketRequest`. A `BucketAccess` removal is triggered by the user deleting their `BucketAccessRequest`. A bucket is not deleted if there are any bindings (accessors). Once all bindings have been removed the `Bucket`'s `conditions` is marked unavailable, **and** if the release policy is "Delete", then the sidecar will gRPC call the provisioner's _Delete_ interface. It's up to each provisioner whether or not to physically delete bucket content, but the expectation is that the physical bukcet will at least be made unavailable.
+_Delete_ covers deleting a bucket and/or revoking access to a bucket. A `Bucket` delete is triggered by the user deleting their `BucketRequest`. A `BucketAccess` removal is triggered by the user deleting their `BucketAccessRequest`. A bucket is not deleted if there are any bindings (accessors). Once all bindings have been removed the `Bucket`'s `conditions` is marked unavailable, **and** if the release policy is "Delete", then the sidecar will gRPC call the provisioner's _Delete_ interface. It's up to each provisioner whether or not to physically delete bucket content, but the expectation is that the physical bucket will at least be made unavailable.
 
 Also, when the app pod terminates, the kubelet will gRPC call `NodeUnpublishVolume` which is received by the cosi-node-adapter. The adapter will ensure that the access granted to this pod is removed, and if this pod is the last accessor, then depending on the bucket's _releasePolicy_, the bucket may be deleted.
 
@@ -572,10 +572,10 @@ message ProvisionerCreateBucketRequest {
     map<string,string> bucket_context = 4;
 
     enum AnonymousBucketAccessMode {
-	BUCKET_PRIVATE = 0;
-	BUCKET_READ_ONLY = 1;
-	BUCKET_WRITE_ONLY = 2;
-	BUCKET_READ_WRITE = 3;
+	PRIVATE = 0;
+	PUBLIC_READ_ONLY = 1;
+	PUBLIC_WRITE_ONLY = 2;
+	PUBLIC_READ_WRITE = 3;
     }
     
     AnonymousBucketAccessMode anonymous_bucket_access_mode = 5;
