@@ -331,13 +331,14 @@ metadata:
   serviceAccountName: [5]
   accessSecretName: [6]
   provisioner: [7]
-  parameters: [8]
+  policyActions [8]
+  parameters: [9]
  status:
-  conditions: [9]
-    - Type: {AccessGranted} [10]
-      Status: [11]
-      Reason: [12]
-      Message: [13]
+  conditions: [10]
+    - Type: {AccessGranted} [11]
+      Status: [12]
+      Reason: [13]
+      Message: [14]
 ```
 
 1. `name`: For greenfield, generated in the pattern of `<bucketAccessRequest.namespace>"-"<bucketAccessRequest.name>`. 
@@ -347,7 +348,8 @@ metadata:
 1. `serviceAccountName`: name of the Kubernetes ServiceAccount specified by the `BucketAccessRequest`.  Undefined when the `BucketAccessRequest.accessSecretName` is defined.
 1. `  accessSecretName`: name of the provisioner generated Secret containing access credentials. This Secret exists in the provisioner’s namespace and must be copied to the app namespace by the COSI controller.
 1. `provisioner`:  name of the provisioner that should handle this `BucketAccess` instance.  Copied from the `BucketAccessClass`.
-1. `parameters`:  A map of string:string key values.  Allows admins to control user and access provisioning by setting provisioner key-values.
+1. `policyActions`: a set of provisioner/platform defined policy actions to allow or deny a given user identity. Copied from `BucketAccessClass`.
+1. `parameters`:  A map of string:string key values.  Allows admins to control user and access provisioning by setting provisioner key-values. Copied from `BucketAccessClass`. Copied from `BucketAccessClass`.
 1. `conditions`: the latest available observation of this `BucketAccess`. (Phase is not used.)
 1. `Type`: only one type is supported: "AccessGranted". If the condition's `Status` is true then the bucket is available to be accessed for the `Reason` provided. If `Status` is false then the bucket is unable to be accessed and, again, `Reason` states why.
 1. `Status`: one of true, false or unknown. If not specified then unknown is assumed. A true status indicates the this condition is true at the time of observation.
