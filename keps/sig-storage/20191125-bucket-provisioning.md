@@ -314,7 +314,7 @@ status:
 
 #### BucketAccess
 
-A cluster-scoped administrative custom resource which encapsulates fields from the `BucketAccessRequest` (BAR) and the `BucketAccessClass` (BAC).  The purpose of the `BucketAccess` (BA) is to serve as communication path between provisioners and the central COSI controller.  In greenfield, the COSI controller creates `BucketAccess` instances for new `BucketAccessRequest`s. In brownfield the admin is expected to manually create the BA. There is a 1:1 mapping between `BucketAccess` and `BucketAccessRequest` instances.
+A cluster-scoped administrative custom resource which encapsulates fields from the `BucketAccessRequest` (BAR) and the `BucketAccessClass` (BAC).  The purpose of the `BucketAccess` (BA) is to serve as communication path between provisioners and the central COSI controller.  In greenfield, the COSI controller creates `BucketAccess` instances for new `BucketAccessRequest`'s. In brownfield and in driverless mode, the admin is expected to manually create the BA. There is a 1:1 mapping between `BucketAccess` and `BucketAccessRequest` instances.
 
 ```yaml
 apiVersion: cosi.io/v1alpha1
@@ -331,14 +331,13 @@ metadata:
   serviceAccountName: [5]
   accessSecretName: [6]
   provisioner: [7]
-  policyActions [8]
-  parameters: [9]
+  parameters: [8]
  status:
-  conditions: [10]
-    - Type: {AccessGranted} [11]
-      Status: [12]
-      Reason: [13]
-      Message: [14]
+  conditions: [9]
+    - Type: {AccessGranted} [10]
+      Status: [11]
+      Reason: [12]
+      Message: [13]
 ```
 
 1. `name`: For greenfield, generated in the pattern of `<bucketAccessRequest.namespace>"-"<bucketAccessRequest.name>`. 
@@ -348,8 +347,7 @@ metadata:
 1. `serviceAccountName`: name of the Kubernetes ServiceAccount specified by the `BucketAccessRequest`.  Undefined when the `BucketAccessRequest.accessSecretName` is defined.
 1. `  accessSecretName`: name of the provisioner generated Secret containing access credentials. This Secret exists in the provisioner’s namespace and must be copied to the app namespace by the COSI controller.
 1. `provisioner`:  name of the provisioner that should handle this `BucketAccess` instance.  Copied from the `BucketAccessClass`.
-1. `policyActions`: a set of provisioner/platform defined policy actions to allow or deny a given user identity. Copied from `BucketAccessClass`.
-1. `parameters`:  A map of string:string key values.  Allows admins to control user and access provisioning by setting provisioner key-values. Copied from `BucketAccessClass`. Copied from `BucketAccessClass`.
+1. `parameters`:  A map of string:string key values.  Allows admins to control user and access provisioning by setting provisioner key-values. Copied from `BucketAccessClass`. Using reserved keys like cosi.io/configMap or cosi.io/secrets specific access policies are referenced
 1. `conditions`: the latest available observation of this `BucketAccess`. (Phase is not used.)
 1. `Type`: only one type is supported: "AccessGranted". If the condition's `Status` is true then the bucket is available to be accessed for the `Reason` provided. If `Status` is false then the bucket is unable to be accessed and, again, `Reason` states why.
 1. `Status`: one of true, false or unknown. If not specified then unknown is assumed. A true status indicates the this condition is true at the time of observation.
@@ -366,17 +364,11 @@ kind: BucketAccessClass
 metadata: 
   name:
 provisioner: [1]
-policyActions: [2]
-  allow:
-  - "*"
-  deny:
-  - "*"
-parameters: [3]
+parameters: [2]
 ```
 
 1. `provisioner`: (required) the name of the driver that `BucketAccess` instances should be managed by. Format: <provisioner-namespace>"/"<provisioner-name>, eg "ceph-rgw-provisoning/ceph-rgw.cosi.ceph.com".
-1. `policyActions`: a set of provisioner/platform defined policy actions to allow or deny a given user identity.
-1. `parameters`: (Optional)  A map of string:string key values.  Allows admins to control user and access provisioning by setting provisioner key-values.
+1. `parameters`: (Optional)  A map of string:string key values.  Allows admins to control user and access provisioning by setting provisioner key-values. Reserved keys cosi.io/configMap and cosi.io/secrets are used to reference user created resources with provider specific access policies.
 
 ---
 
@@ -406,7 +398,6 @@ spec:
         volumeAttributes: [5]
           bucketRequestName: <my-br-name>
           bucketAccessRequestName: <my-bar-name>
-          bucketRequestNamespace:
 ```
 1. the service account may be needed depending on cloud IAM intergration with kubernetes.
 1. the mount path is the directory where the app will read the credentials and endpoint.
@@ -491,6 +482,32 @@ These are the common steps to delete a `Bucket`. Note: there are atypical workfl
 + If the release policy is "Delete", the sidecar gRPC calls the provisoner's _Delete_ interface, and upon successful completion, sets the `Bucket`'s `conditions[x].Reason to "Deleted"
 + If the release policy is "Retain" then the `Bucket` remains "Released" and it can potentially be reused.
 + When the COSI controller sees the `Bucket`'s `conditions[x].Reason is "Deleted", it deletes all the finalizers and the real deletions occur.
+
+###  Setting Access Permissions
+#### Dynamic Provisioning
+Incoming BucketAccessRequest either contains a ServiceAccountName where cloud provider supports identity integration or a accessSecretName. In both cases, the incoming BAR representing a request for a user to access the `Bucket`.
+When requesting access to a bucket, workloads will go through the following  scenarios described here:
++  New User and New/Existing Bucket: In this scenario, we do not have user account in the backend storage system as well as no access for this user to the `Bucket`. 
+	+ Create user account in the backend storage system 
+	+ add the access privileges for the user to the `Bucket`
+	+ return the credentials to the workload owning the BAR
++  Existing User and New Bucket: In this scenario, we have the user account already created and exists in the backend storage system but the account is not associated to the `Bucket`. 
+	+ add the access privileges to the `Bucket`
+	+ return the credentials to the workload owning the BAR
++  Existing User and Existing Bucket: In this scenario, we have a user account that has privileges defined on the `Bucket`.  The existing privileges that the user have may conflict with the privileges user requesting. 
+	+ FAIL, if existing privileges are different from the requested privileges
+	+ if the existing privileges match the requested privileges, return the credentials to the workload owning the BAR
++ A Service Account specified and cloud platform identity integration maps Kubernetes ServiceAccounts to the account in the backend system. No need to create credentials here.
+	
+Upon success, BucketAccess Object is created with one of the fields `serviceAccountName` or `accessSecretName` is populated for workloads to use the bucket.
+
+#### Static Provisioning
+Driverless Mode allows the existing workloads to migrate to make use of COSI without the need for Vendors to create drivers. Incoming BucketAccessRequest comes with a pre-populated BucketObject that contains the necessary credentials. The following steps show the details of the workflow:
++ User creates BucketObject 
++ User creates BucketAccess that points to BucketObject
++ BucketAccess will contain necessary credential referenced through Secrets/ConfigMaps.
++ User creates BucketAccessRequest that references existing BucketObject and BucketAccess.
++ COSI detects the existence of the credentials and marks BucketAccess with appropriate status for workloads to consume.
 
 ---
 
