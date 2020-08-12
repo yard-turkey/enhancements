@@ -131,11 +131,7 @@ spec:
   bucketClassName: [5]
   bucketInstanceName: [6]
 status:
-  conditions: [7]
-    - Type: {BucketAvailable} [8]
-      Status: [9]
-      Reason: [10]
-      Message: [11]
+    bucketAvailable: [7]
 ```
 
 1. `labels`: added by the controller.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
@@ -144,11 +140,7 @@ status:
 1. `bucketPrefix`: (optional) prefix prepended to a randomly generated bucket name, eg. “yosemite-photos-". If empty, no prefix is prepended. If `bucketInstanceName` is also supplied then it overrides `bucketPrefix'.
 1. `bucketClassName`: (optional) name of the target `BucketClass`. If omitted, a default bucket class matching the protocol is searched for. If the bucket class does not support the requested protocol, an error is logged and retries occur. The `BucketClass` is required for both greenfield and brownfield uses.
 1. `bucketInstanceName`: (optional) name of the cluster-wide `Bucket` instance. If blank, then COSI fills in the name during the binding step. If defined by the user, then this names the `Bucket` instance created by the admin. There is no automation available to make this name known to the user. Once a `Bucket` instance is created, the name of the actual bucket can be found.
-1. `conditions`: the latest available observation of this `BucketRequest`. (Phase is not used.)
-1. `Type`: only one type is supported: "BucketAvailable". If the condition's `Status` is true then the bucket is available to be accessed for the `Reason` provided. If `Status` is false then the bucket is unable to be accessed and, again, `Reason` states why.
-1. `Status`: one of true, false or unknown. If not specified then unknown is assumed. A true status indicates the this condition is true at the time of observation.
-1. `Reason`: one of "Bound", "Creating", "Deleting", "Released".
-1. `Message`: optional human readable message containing more details.
+1. `bucketAvailable`: if true the bucket has been provisioned. If false then the bucket has not been provisioned and is unable to be accessed.
 
 #### Bucket
 
@@ -193,11 +185,7 @@ spec:
     - name:
   parameters: [11]
 status:
-  conditions: [12]
-    - Type: {BucketAvailable} [13]
-      Status: [14]
-      Reason: [15]
-      Message: [16]
+    bucketAvailable: [12]
 ```
 
 1. `name`: When created by COSI, the `Bucket` name is generated in this format: _<bucketRequest.namespace>"-"<bucketRequest.name>_. If an admin creates a `Bucket`, as is necessary for brownfield access, they can use any name.
@@ -224,11 +212,7 @@ status:
      - `gcs`: data required to target a provisioned GCS bucket and/or service account.
 10. `allowedNamespaces`: a copy of the `BucketClass`'s allowed namespaces. Additionally, this list can be mutated by the admin to allow or deny namespaces over the life of the bucket.
 11. `parameters`: a copy of the BucketClass parameters.
-12. `conditions`: the latest available observation of this `Bucket`. (Phase is not used.)
-13. `Type`: only one type is supported: "BucketAvailable". If the condition's `Status` is true then the bucket is available to be accessed for the `Reason` provided. If `Status` is false then the bucket is unable to be accessed and, again, `Reason` states why.
-14. `Status`: one of true, false or unknown. If not specified then unknown is assumed. A true status indicates the this condition is true at the time of observation.
-15. `Reason`: one of "Available", "Bound", "Creating", "Deleting", "Released". Note: "Available" indicates the `Bucket` was observed and its `conditions` was empty, which is expected when a brownfield `Bucket` is manually created.
-16. `Message`: optional human readable message containing more details.
+12. `bucketAvailable`: if true the bucket has been provisioned. If false then the bucket has not been provisioned and is unable to be accessed.
 
 #### BucketClass
 
@@ -293,11 +277,7 @@ spec:
   bucketAccessClassName: [6]
   bucketAccessName: [7]
 status:
-  conditions: [8]
-    - Type: {AccessGranted} [9]
-      Status: [10]
-      Reason: [11]
-      Message: [12]
+    accessGranted: [8]
 ```
 
 1. `labels`: added by the controller.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
@@ -307,11 +287,7 @@ status:
 1. `bucketRequestName`: the name of the `BucketRequest` associated with this access request. From the bucket request, COSI knows the `Bucket` instance and thus bucket and its properties.
 1. `bucketAccessClassName`: name of the `BucketAccessClass` specifying the desired set of policy actions to be set for a user identity or ServiceAccount.
 1. `bucketAccessName`: name of the bound cluster-scoped `BucketAccess` instance. 
-1. `conditions`: the latest available observation of this `BucketAccessRequest`. (Phase is not used.)
-1. `Type`: only one type is supported: "AccessGranted". If the condition's `Status` is true then access to the bucket has been granted for the `Reason` provided. If `Status` is false then the bucket is unable to be accessed and, again, `Reason` states why.
-1. `Status`: one of true, false or unknown. If not specified then unknown is assumed. A true status indicates the this condition is true at the time of observation.
-1. `Reason`: one of "Bound", "Granting", "Revoking".
-1. `Message`: optional human readable message containing more details.
+1. `accessGranted`: if true access has been granted to the bucket. If false then access to the bucket has not been granted.
 
 #### BucketAccess
 
@@ -336,11 +312,7 @@ metadata:
   parameters: [9]
   principal: [10]
  status:
-  conditions: [11]
-    - Type: {AccessGranted} [12]
-      Status: [13]
-      Reason: [14]
-      Message: [15]
+    accessGranted: [11]
 ```
 
 1. `name`: For greenfield, generated in the pattern of `<bucketAccessRequest.namespace>"-"<bucketAccessRequest.name>`. 
@@ -353,11 +325,7 @@ metadata:
 1. `policyActionsConfigMapData`: encoded data that contains a set of provisioner/platform defined policy actions to a given user identity. Contents of the ConfigMap that a *policyActionsConfigMap* field in the `BucketAccessClass` refers to.
 1. `parameters`:  A map of string:string key values.  Allows admins to control user and access provisioning by setting provisioner key-values. Copied from `BucketAccessClass`. 
 1. `principal`: username/access-key for the object storage provider to uniquely identify the user who has access to this bucket  
-1. `conditions`: the latest available observation of this `BucketAccess`. (Phase is not used.)
-1. `Type`: only one type is supported: "AccessGranted". If the condition's `Status` is true then the bucket is available to be accessed for the `Reason` provided. If `Status` is false then the bucket is unable to be accessed and, again, `Reason` states why.
-1. `Status`: one of true, false or unknown. If not specified then unknown is assumed. A true status indicates the this condition is true at the time of observation.
-1. `Reason`: one of "Available", "Bound", "Granting", "Revoking".  Note: "Available" indicates the `BucketAccess` was observed and its `conditions` was empty, which is expected when a brownfield `BucketAccess` is manually created.
-1. `Message`: optional human readable message containing more details.
+1. `accessGranted`: if true access has been granted to the bucket. If false then access to the bucket has not been granted.
 
 #### BucketAccessClass
 
