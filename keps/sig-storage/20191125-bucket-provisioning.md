@@ -46,8 +46,8 @@ status: provisional
     - [App Pod](#app-pod)
   - [Topology](#topology)
   - [Workflows](#workflows)
-    - [Create](#create)
-    - [Delete](#delete)
+    - [Create](#createbucket)
+    - [Delete](#deletebucket)
   - [Provisioner Secrets](#provisioner-secrets)
   - [gRPC Definitions](#grpc-definitions)
 <!-- /toc -->
@@ -188,7 +188,6 @@ spec:
       serviceAccount:
   allowedNamespaces: [10]
     - name:
-      uid:
   parameters: [11]
 status:
   conditions: [12]
@@ -246,7 +245,6 @@ anonymousAccessMode: [4]
 releasePolicy: {"Delete", "Retain"} [5]
 allowedNamespaces: [6]
   - name:
-    uid:
 parameters: [7]
 ```
 
@@ -264,7 +262,7 @@ parameters: [7]
    - _Delete_: the bucket and its contents are destroyed.
 > Note: the `Bucket`'s release policy is set to "Retain" as a default. Exercise caution when using the "Delete" release policy as the bucket content will be deleted.
 > Note: a `Bucket` is not deleted if it is bound to any `BucketRequest`s.
-6. `allowedNamespaces`: a list of namespaces (name, uid) that are permitted to either create new buckets or to access existing buckets. This list is static for the life of the `BucketClass`, but the `Bucket` instance's list of allowed namespaces can be mutated by the admin.
+6. `allowedNamespaces`: a list of namespaces that are permitted to either create new buckets or to access existing buckets. This list is static for the life of the `BucketClass`, but the `Bucket` instance's list of allowed namespaces can be mutated by the admin.
 7. `parameters`: (optional) a map of string:string key values.  Allows admins to set provisioner key-values.  **Note:** see [Provisioner Secrets](#provisioner-secrets) for some predefined `parameters` settings.
 
 ### Access APIs
