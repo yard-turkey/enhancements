@@ -5,6 +5,8 @@ Object Bucket Provisioning
 authors:
   - "@jeffvance"
   - "@copejon"
+  - "@wlan0"
+  - "@brahmaroutu"
 owning-sig: "sig-storage"
 reviewers:
   - "@saad-ali"
@@ -13,10 +15,11 @@ reviewers:
   - "@guymguym"
   - "@travisn"
 approvers:
-  - TBD
+  - "@saad-ali"
+  - "@xing-yang"
 editor: TBD
 creation-date: 2019-11-25
-last-updated: 2020-07-08
+last-updated: 2020-08-12
 status: provisional
 ---
 
