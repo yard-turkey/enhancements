@@ -306,7 +306,7 @@ status:
 1. `accessSecretName`: (optional) the name of a Kubernetes Secret in the same namespace.  This field is used when there is no cloud provider identity integration.  Should not be set when specifying `serviceAccountName`.
 1. `bucketRequestName`: the name of the `BucketRequest` associated with this access request. From the bucket request, COSI knows the `Bucket` instance and thus bucket and its properties.
 1. `bucketAccessClassName`: name of the `BucketAccessClass` specifying the desired set of policy actions to be set for a user identity or ServiceAccount.
-1. `bucketAccessName`: name of the bound cluster-scoped `BucketAccess` instance.
+1. `bucketAccessName`: name of the bound cluster-scoped `BucketAccess` instance. 
 1. `conditions`: the latest available observation of this `BucketAccessRequest`. (Phase is not used.)
 1. `Type`: only one type is supported: "AccessGranted". If the condition's `Status` is true then access to the bucket has been granted for the `Reason` provided. If `Status` is false then the bucket is unable to be accessed and, again, `Reason` states why.
 1. `Status`: one of true, false or unknown. If not specified then unknown is assumed. A true status indicates the this condition is true at the time of observation.
@@ -334,6 +334,7 @@ metadata:
   provisioner: [7]
   policyActionsConfigMapData: [8]
   parameters: [9]
+  principal: [10]
  status:
   conditions: [10]
     - Type: {AccessGranted} [11]
@@ -351,6 +352,7 @@ metadata:
 1. `provisioner`:  name of the provisioner that should handle this `BucketAccess` instance.  Copied from the `BucketAccessClass`.
 1. `policyActionsConfigMapData`: encoded data that contains a set of provisioner/platform defined policy actions to a given user identity. Contents of the ConfigMap that a *policyActionsConfigMap* field in the `BucketAccessClass` refers to.
 1. `parameters`:  A map of string:string key values.  Allows admins to control user and access provisioning by setting provisioner key-values. Copied from `BucketAccessClass`. 
+1. `principal`: username/access-key for the object storage provider to uniquely identify the user who has access to this bucket  
 1. `conditions`: the latest available observation of this `BucketAccess`. (Phase is not used.)
 1. `Type`: only one type is supported: "AccessGranted". If the condition's `Status` is true then the bucket is available to be accessed for the `Reason` provided. If `Status` is false then the bucket is unable to be accessed and, again, `Reason` states why.
 1. `Status`: one of true, false or unknown. If not specified then unknown is assumed. A true status indicates the this condition is true at the time of observation.
