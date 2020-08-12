@@ -336,11 +336,11 @@ metadata:
   parameters: [9]
   principal: [10]
  status:
-  conditions: [10]
-    - Type: {AccessGranted} [11]
-      Status: [12]
-      Reason: [13]
-      Message: [14]
+  conditions: [11]
+    - Type: {AccessGranted} [12]
+      Status: [13]
+      Reason: [14]
+      Message: [15]
 ```
 
 1. `name`: For greenfield, generated in the pattern of `<bucketAccessRequest.namespace>"-"<bucketAccessRequest.name>`. 
