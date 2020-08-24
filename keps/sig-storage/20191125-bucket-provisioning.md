@@ -53,6 +53,7 @@ status: provisional
     - [Delete](#deletebucket)
   - [Provisioner Secrets](#provisioner-secrets)
   - [gRPC Definitions](#grpc-definitions)
+- [Alternatives Considered](#alternatives-considered)
 <!-- /toc -->
 # Summary
 
@@ -161,7 +162,7 @@ metadata:
     - cosi.io/finalizer [3]
 spec:
   provisioner: [4]
-  releasePolicy: [5]
+  retentionPolicy: [5]
   anonymousAccessMode: [6]
   bucketClassName: [7]
   bindings: [8]
@@ -192,10 +193,10 @@ status:
 2. `labels`: added by the controller.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
 3. `finalizers`: added by the controller to defer `Bucket` deletion until backend deletion ops succeed.
 4. `provisioner`: The provisioner field as defined in the `BucketClass`.  Used by sidecars to filter `Bucket`s. Format: <provisioner-namespace>"/"<provisioner-name>, eg "ceph-rgw-provisoning/ceph-rgw.cosi.ceph.com".
-5. `releasePolicy`: Prescribes outcome of a Delete events. 
+5. `retentionPolicy`: Prescribes outcome of a Delete events. 
    - _Retain_: (default) the `Bucket` and its data are preserved. The `Bucket` can potentially be reused.
    - _Delete_: the bucket and its contents are destroyed.
-> Note: the `Bucket`'s release policy is set to "Retain" as a default. Exercise caution when using the "Delete" release policy as the bucket content will be deleted.
+> Note: the `Bucket`'s retention policy is set to "Retain" as a default. Exercise caution when using the "Delete" retention policy as the bucket content will be deleted.
 > Note: a `Bucket` is not deleted if it is bound to any `BucketRequest`s.
 6. `anonymousAccessMode`: a string specifying *uncredentialed* access to the Bucket.  This is applicable to cases where the storage instance or objects are intended to be publicly readable and/or writable. One of:
    - "private": Default, disallow uncredentialed access to the storage instance.
@@ -216,7 +217,7 @@ status:
 
 #### BucketClass
 
-A cluster-scoped custom resource to provide admins control over the handling of bucket provisioning.  The `BucketClass` (BC) defines a release policy, specifies driver specific parameters, and provides the provisioner name. A list of allowed namespaces can be specified to restrict new bucket creation and access to existing buckets. A default bucket class can be defined for each supported protocol, which allows the bucket class to be omitted from a `BucketRequest`. Most of the `BucketClass` fields are copied to the generated `Bucket` instance.
+A cluster-scoped custom resource to provide admins control over the handling of bucket provisioning.  The `BucketClass` (BC) defines a retention policy, specifies driver specific parameters, and provides the provisioner name. A list of allowed namespaces can be specified to restrict new bucket creation and access to existing buckets. A default bucket class can be defined for each supported protocol, which allows the bucket class to be omitted from a `BucketRequest`. Most of the `BucketClass` fields are copied to the generated `Bucket` instance.
 
 > Note: a `BucketClass` is immutable, like a storage class, but the fields copied to the `Bucket` can be edited by the admin.
 
@@ -229,7 +230,7 @@ provisioner: [1]
 isDefaultBucketClass: [2]
 protocol: {"azureblob", "gcs", "s3", ... } [3]
 anonymousAccessMode: [4]
-releasePolicy: {"Delete", "Retain"} [5]
+retentionPolicy: {"Delete", "Retain"} [5]
 allowedNamespaces: [6]
   - name:
 parameters: [7]
@@ -244,10 +245,10 @@ parameters: [7]
    - "publicReadOnly": Read only, uncredentialed users can call ListBucket and GetObject.
    - "publicWriteOnly": Write only, uncredentialed users can only call PutObject.
    - "publicReadWrite": Read/Write, same as `ro` with the addition of PutObject being allowed.
-5. `releasePolicy`: defines bucket retention for greenfield `BucketRequest` deletes. **
+5. `retentionPolicy`: defines bucket retention for greenfield `BucketRequest` deletes. **
    - _Retain_: (default) the `Bucket` and its data are preserved. The `Bucket` can potentially be reused.
    - _Delete_: the bucket and its contents are destroyed.
-> Note: the `Bucket`'s release policy is set to "Retain" as a default. Exercise caution when using the "Delete" release policy as the bucket content will be deleted.
+> Note: the `Bucket`'s retention policy is set to "Retain" as a default. Exercise caution when using the "Delete" retention policy as the bucket content will be deleted.
 > Note: a `Bucket` is not deleted if it is bound to any `BucketRequest`s.
 6. `allowedNamespaces`: a list of namespaces that are permitted to either create new buckets or to access existing buckets. This list is static for the life of the `BucketClass`, but the `Bucket` instance's list of allowed namespaces can be mutated by the admin.
 7. `parameters`: (optional) a map of string:string key values.  Allows admins to set provisioner key-values.  **Note:** see [Provisioner Secrets](#provisioner-secrets) for some predefined `parameters` settings.
@@ -439,9 +440,9 @@ The user also needs to creates a `BucketAccessRequest` (BAR), which references t
 
 ![DeleteBucket Workflow](COSI%20Architecture_Delete%20Bucket%20Workflow.png)
 
-_Delete_ covers deleting a bucket and/or revoking access to a bucket. A `Bucket` delete is triggered by the user deleting their `BucketRequest`. A `BucketAccess` removal is triggered by the user deleting their `BucketAccessRequest`. A bucket is not deleted if there are any bindings (accessors). Once all bindings have been removed the `Bucket`'s `conditions` is marked unavailable, **and** if the release policy is "Delete", then the sidecar will gRPC call the provisioner's _Delete_ interface. It's up to each provisioner whether or not to physically delete bucket content, but the expectation is that the physical bucket will at least be made unavailable.
+_Delete_ covers deleting a bucket and/or revoking access to a bucket. A `Bucket` delete is triggered by the user deleting their `BucketRequest`. A `BucketAccess` removal is triggered by the user deleting their `BucketAccessRequest`. A bucket is not deleted if there are any bindings (accessors). Once all bindings have been removed the `Bucket` is marked unavailable, **and** if the retention policy is "Delete", then the sidecar will gRPC call the provisioner's _Delete_ interface. It's up to each provisioner whether or not to physically delete bucket content, but the expectation is that the physical bucket will at least be made unavailable.
 
-Also, when the app pod terminates, the kubelet will gRPC call `NodeUnpublishVolume` which is received by the cosi-node-adapter. The adapter will ensure that the access granted to this pod is removed, and if this pod is the last accessor, then depending on the bucket's _releasePolicy_, the bucket may be deleted.
+Also, when the app pod terminates, the kubelet will gRPC call `NodeUnpublishVolume` which is received by the cosi-node-adapter. The adapter will ensure that the access granted to this pod is removed, and if this pod is the last accessor, then depending on the bucket's _retentionPolicy, the bucket may be deleted.
 
 > Note: a brownfield `BucketRequest` is not honored if the associated `Bucket`'s _deleteTimestamp_ is set.
 
@@ -456,10 +457,10 @@ These are the common steps to delete a `Bucket`. Note: there are atypical workfl
 + Sidecar sees the deleteTimestamp set in the `BucketAccess` and gRPC calls the provisoner's _Revoke_ interface.
 + COSI unbinds the BA from the `Bucket`.
 + COSI checks for additional binding references and if there are any we stop processing the BR delete (but continue processing the BAR delete).
-+ Sidecar sees `Bucket.conditions[x].Reason` = "Released" and knows the `Bucket.releasePolicy`.
-+ If the release policy is "Delete", the sidecar gRPC calls the provisoner's _Delete_ interface, and upon successful completion, sets the `Bucket`'s `conditions[x].Reason to "Deleted"
-+ If the release policy is "Retain" then the `Bucket` remains "Released" and it can potentially be reused.
-+ When the COSI controller sees the `Bucket`'s `conditions[x].Reason is "Deleted", it deletes all the finalizers and the real deletions occur.
++ Sidecar sees the `Bucket` is released and knows the `Bucket.retentionPolicy`.
++ If the retention policy is "Delete", the sidecar gRPC calls the provisoner's _Delete_ interface, and upon successful completion, updates the `Bucket` to Deleted.
++ If the retention policy is "Retain" then the `Bucket` remains "Released" and it can potentially be reused.
++ When the COSI controller sees the `Bucket` is "Deleted", it deletes all the finalizers and the real deletions occur.
 
 ###  Setting Access Permissions
 #### Dynamic Provisioning
@@ -653,3 +654,20 @@ message ProvisionerRevokeBucketAccessResponse {
     // Intentionally left blank
 }
 ```
+
+## Alternatives Considered
+This KEP has had a long journey and many revisions. Here we capture the main alternatives and the reasons why we decided on a different solution.
+
+### Add Bucket Instance Name to BucketAccessClass (brownfield)
+
+#### Motivation
+1. To improve workload _portability_ user namespace resources should not reference non-deterministic generated names. If a `BucketAccessRequest` (BAR) references a `Bucket` instance's name, and that name is psuedo random (eg. a UID added to the name) then the BAR, and hence the workload deployment, is not portable to another cluser.
+
+1. If the `Bucket` instance name is in the BAC instead of the BAR then the user is not burdened with knowledge of `Bucket` names, and there is some centralized admin control over brownfield bucket access.
+
+#### Problems
+1. The greenfield -> brownfield workflow is very awkward with this approach. The user creates a `BucketRequest` (BR) to provision a new bucket which they then want to access. The user creates a BAR pointing to a BAC which must contain the name of this newly created ``Bucket` instance. Since the `Bucket`'s name is non-deterministic the admin cannot create the BAC in advance. Instead, the user must ask the admin to find the new `Bucket` instance and add its name to new (or maybe existing) BAC.
+
+1. App portability is still a concern but we believe that deterministic, unique `Bucket` and `BucketAccess` names can be generated and referenced in BRs and BARs.
+
+1. Since, presumably, all or most BACs will be known to users, there is no real "control" offered to the admin with this approach. Instead, adding _allowedNamespaces_ or similar to the BAC may help with this.
