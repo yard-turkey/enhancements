@@ -28,6 +28,8 @@ status: provisional
 ## Table of Contents
 
 <!-- toc -->
+- [Object Bucket Provisioning](#object-bucket-provisioning)
+  - [Table of Contents](#table-of-contents)
 - [Summary](#summary)
   - [Motivation](#motivation)
   - [Goals](#goals)
@@ -47,13 +49,26 @@ status: provisional
       - [BucketAccess](#bucketaccess)
       - [BucketAccessClass](#bucketaccessclass)
     - [App Pod](#app-pod)
-  - [Topology](#topology)
+    - [Topology](#topology)
   - [Workflows](#workflows)
-    - [Create](#createbucket)
-    - [Delete](#deletebucket)
+    - [CreateBucket](#createbucket)
+        - [Sharing Dynamically Created Buckets (green-brown)](#sharing-dynamically-created-buckets-green-brown)
+    - [DeleteBucket](#deletebucket)
+    - [Setting Access Permissions](#setting-access-permissions)
+      - [Dynamic Provisioning](#dynamic-provisioning)
+      - [Static Provisioning](#static-provisioning)
   - [Provisioner Secrets](#provisioner-secrets)
-  - [gRPC Definitions](#grpc-definitions)
-- [Alternatives Considered](#alternatives-considered)
+    - [gRPC Definitions](#grpc-definitions)
+      - [ProvisionerGetInfo](#provisionergetinfo)
+      - [ProvisonerCreateBucket](#provisonercreatebucket)
+      - [ProvisonerDeleteBucket](#provisonerdeletebucket)
+      - [ProvisionerGrantBucketAccess](#provisionergrantbucketaccess)
+      - [ProvisionerRevokeBucketAccess](#provisionerrevokebucketaccess)
+  - [Test Plan](#test-plan)
+  - [Alternatives Considered](#alternatives-considered)
+    - [Add Bucket Instance Name to BucketAccessClass (brownfield)](#add-bucket-instance-name-to-bucketaccessclass-brownfield)
+      - [Motivation](#motivation-1)
+      - [Problems](#problems)
 <!-- /toc -->
 # Summary
 
@@ -548,7 +563,7 @@ cosi.io/provisioner-secret-namespace:
   ```
 ---
 
-## gRPC Definitions
+### gRPC Definitions
 
 There is one service defined by COSI - `Provisioner`. This will need to be satisfied by the vendor-provisioner in order to be COSI-compatible
 
@@ -672,6 +687,14 @@ message ProvisionerRevokeBucketAccessResponse {
     // Intentionally left blank
 }
 ```
+
+## Test Plan
+
+- Unit tests will cover the functionality of the controllers.
+- Unit tests will cover the new APIs.
+- An end-to-end test suite will cover testing all the components together.
+- Component tests will cover testing each controller in a blackbox fashion.
+- Tests need to cover both correctly and incorrectly configured cases.
 
 ## Alternatives Considered
 This KEP has had a long journey and many revisions. Here we capture the main alternatives and the reasons why we decided on a different solution.
