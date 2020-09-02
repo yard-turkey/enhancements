@@ -65,6 +65,8 @@ status: provisional
       - [ProvisionerGrantBucketAccess](#provisionergrantbucketaccess)
       - [ProvisionerRevokeBucketAccess](#provisionerrevokebucketaccess)
   - [Test Plan](#test-plan)
+  - [Graduation Criteria](#graduation-criteria)
+    - [Alpha](#alpha)
   - [Alternatives Considered](#alternatives-considered)
     - [Add Bucket Instance Name to BucketAccessClass (brownfield)](#add-bucket-instance-name-to-bucketaccessclass-brownfield)
       - [Motivation](#motivation-1)
@@ -497,7 +499,7 @@ These are the common steps to delete a `Bucket`. Note: there are atypical workfl
 
 ###  Setting Access Permissions
 #### Dynamic Provisioning
-Incoming `BucketAccessRequest`s either contains a *serviceAccountName* where a cloud provider supports identity integration, or an *accessSecretName*. In both cases, the incoming `BucketAccessRequest` represents a user to access the `Bucket`.
+Incoming `BucketAccessRequest` either contains a *serviceAccountName* where a cloud provider supports identity integration, or an *accessSecretName*. In both cases, the incoming `BucketAccessRequest` represents a user to access the `Bucket`.
 When requesting access to a bucket, workloads will go through the following  scenarios described here:
 +  New User: In this scenario, we do not have user account in the backend storage system as well as no access for this user to the `Bucket`. 
 	+ Create user account in the backend storage system.
@@ -516,12 +518,12 @@ Upon success, the `BucketAccess` instance is ready and the app workload can acce
 #### Static Provisioning
 Driverless Mode allows the existing workloads to make use of COSI without the need for Vendors to create drivers. The following steps show the details of the workflow:
 + Admin creates `Bucket` instance.
-+ Admin creates `BucketAccess` instance and references it in the `Bucket` instance.
++ Admin creates `BucketAccess` instance.
 + `BucketAccess` instance references `BucketAccessClass` that hosts credentials referenced through Secrets/ConfigMaps.
 + User creates `BucketAccessRequest` that references existing `BucketRequest` instance and `BucketAccess` instance.
 + COSI detects the existence of the `BucketAccess` instance and marks it with appropriate status for workloads to consume.
 	+ if the `BucketAccess` instance specifies *serviceAccountName*, we have a service account mapped to cloud provider identity and the app workload can directly use this account.
-	+ if the `BucketAccess` instance specifies *accessSecretName* we have a secret containing access credentials and the app workload can use these secrets once copied to their namespace by the COSI Controller.
+	+ if the `BucketAccess` instance specifies *accessSecretName* we have a secret containing access credentials and the app workload can use these secrets to access the backend bucket.
 
 ---
 
@@ -602,7 +604,7 @@ message ProvisionerCreateBucketRequest {
     // This field is REQUIRED
     string bucket_name = 1;
 
-    map<string,string> bucket_context = 4;
+    map<string,string> bucket_context = 2;
 
     enum AnonymousBucketAccessMode {
 	PRIVATE = 0;
@@ -611,7 +613,7 @@ message ProvisionerCreateBucketRequest {
 	PUBLIC_READ_WRITE = 3;
     }
     
-    AnonymousBucketAccessMode anonymous_bucket_access_mode = 5;
+    AnonymousBucketAccessMode anonymous_bucket_access_mode = 3;
 }
 
 message ProvisionerCreateBucketResponse {
@@ -628,7 +630,7 @@ message ProvisionerDeleteBucketRequest {
     // This field is REQUIRED
     string bucket_name = 1;
     
-    map<string,string> bucket_context = 4;    
+    map<string,string> bucket_context = 2;    
 }
 
 message ProvisionerDeleteBucketResponse {
@@ -640,7 +642,7 @@ message ProvisionerDeleteBucketResponse {
 
 This call grants access to a particular principal. Note that the principal is the account for which this access should be granted. 
 
-If the principal is set, then it should be used as the username of the created credentials or in someway should be deterministically used to generate a new credetial for this request. This principal will be used as the unique identifier for deleting this access by calling ProvisionerRevokeBucketAccess
+If the principal is set, then it should be used as the username of the created credentials or in some way should be deterministically used to generate a new credential for this request. This principal will be used as the unique identifier for deleting this access by calling ProvisionerRevokeBucketAccess
 
 If the `principal` is empty, then a new service account should be created in the backend that satisfies the requested `access_policy`. The username/principal for this service account should be set in the `principal` field of `ProvisionerGrantBucketAccessResponse`.
 
@@ -649,12 +651,12 @@ message ProvisionerGrantBucketAccessRequest {
     // This field is REQUIRED
     string bucket_name = 1;
     
-    map<string,string> bucket_context = 4;  
+    map<string,string> bucket_context = 2;  
 
-    string principal = 5;
+    string principal = 3;
     
     // This field is REQUIRED
-    string access_policy = 6;
+    string access_policy = 4;
 }
 
 message ProvisionerGrantBucketAccessResponse {
@@ -677,10 +679,10 @@ message ProvisionerRevokeBucketAccessRequest {
     // This field is REQUIRED
     string bucket_name = 1;
     
-    map<string,string> bucket_context = 4;  
+    map<string,string> bucket_context = 2;  
 
     // This field is REQUIRED
-    string principal = 5;
+    string principal = 3;
 }
 
 message ProvisionerRevokeBucketAccessResponse {
@@ -695,6 +697,17 @@ message ProvisionerRevokeBucketAccessResponse {
 - An end-to-end test suite will cover testing all the components together.
 - Component tests will cover testing each controller in a blackbox fashion.
 - Tests need to cover both correctly and incorrectly configured cases.
+
+
+## Graduation Criteria
+
+### Alpha
+
+- API is reviewed and accepted
+- Implement all COSI components to support Greenfield, Green/Brown Field, Brownfield and Static Driverless provisioning
+- Evaluate gaps, update KEP and conduct reviews for all design changes 
+- Develop unit test cases to demonstrate that the above mentioned use cases work correctly
+
 
 ## Alternatives Considered
 This KEP has had a long journey and many revisions. Here we capture the main alternatives and the reasons why we decided on a different solution.
