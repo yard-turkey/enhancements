@@ -13,13 +13,14 @@ reviewers:
   - "@alarge"
   - "@erinboyd"
   - "@guymguym"
-  - "@travisn"
+  - "@rsquared"
+  - "@krishchow"
 approvers:
   - "@saad-ali"
   - "@xing-yang"
 editor: TBD
 creation-date: 2019-11-25
-last-updated: 2020-08-12
+last-updated: 2020-09-01
 status: provisional
 ---
 
@@ -28,17 +29,16 @@ status: provisional
 ## Table of Contents
 
 <!-- toc -->
-- [Object Bucket Provisioning](#object-bucket-provisioning)
-  - [Table of Contents](#table-of-contents)
+- [Release Signoff Checklist](#release-signoff-checklist)
 - [Summary](#summary)
-  - [Motivation](#motivation)
+- [Motivation](#motivation)
+  - [User Stories](#user-stories)
+    - [Admin](#admin)
+    - [User](#user)
   - [Goals](#goals)
   - [Non-Goals](#non-goals)
-  - [Vocabulary](#vocabulary)
+- [Vocabulary](#vocabulary)
 - [Proposal](#proposal)
-  - [User Stories](#user-stories)
-      - [Admin](#admin)
-      - [User](#user)
   - [APIs](#apis)
     - [Storage APIs](#storage-apis)
       - [BucketRequest](#bucketrequest)
@@ -50,39 +50,71 @@ status: provisional
       - [BucketAccessClass](#bucketaccessclass)
     - [App Pod](#app-pod)
     - [Topology](#topology)
-  - [Workflows](#workflows)
-    - [CreateBucket](#createbucket)
-        - [Sharing Dynamically Created Buckets (green-brown)](#sharing-dynamically-created-buckets-green-brown)
-    - [DeleteBucket](#deletebucket)
-    - [Setting Access Permissions](#setting-access-permissions)
-      - [Dynamic Provisioning](#dynamic-provisioning)
-      - [Static Provisioning](#static-provisioning)
-  - [Provisioner Secrets](#provisioner-secrets)
-    - [gRPC Definitions](#grpc-definitions)
-      - [ProvisionerGetInfo](#provisionergetinfo)
-      - [ProvisonerCreateBucket](#provisonercreatebucket)
-      - [ProvisonerDeleteBucket](#provisonerdeletebucket)
-      - [ProvisionerGrantBucketAccess](#provisionergrantbucketaccess)
-      - [ProvisionerRevokeBucketAccess](#provisionerrevokebucketaccess)
-  - [Test Plan](#test-plan)
-  - [Graduation Criteria](#graduation-criteria)
-    - [Alpha](#alpha)
-  - [Alternatives Considered](#alternatives-considered)
-    - [Add Bucket Instance Name to BucketAccessClass (brownfield)](#add-bucket-instance-name-to-bucketaccessclass-brownfield)
-      - [Motivation](#motivation-1)
-      - [Problems](#problems)
+- [Workflows](#workflows)
+  - [Create Bucket](#create-bucket)
+  - [Sharing COSI Created Buckets](#green-brown)](#sharing-cosi-created-buckets)
+  - [Delete Bucket](#delete-bucket)
+  - [Setting Access Permissions](#setting-access-permissions)
+    - [Dynamic Provisioning](#dynamic-provisioning)
+    - [Static Provisioning](#static-provisioning)
+- [Provisioner Secrets](#provisioner-secrets)
+- [gRPC Definitions](#grpc-definitions)
+  - [ProvisionerGetInfo](#provisionergetinfo)
+  - [ProvisonerCreateBucket](#provisonercreatebucket)
+  - [ProvisonerDeleteBucket](#provisonerdeletebucket)
+  - [ProvisionerGrantBucketAccess](#provisionergrantbucketaccess)
+  - [ProvisionerRevokeBucketAccess](#provisionerrevokebucketaccess)
+- [Test Plan](#test-plan)
+- [Graduation Criteria](#graduation-criteria)
+  - [Alpha](#alpha)
+- [Alternatives Considered](#alternatives-considered)
+  - [Add Bucket Instance Name to BucketAccessClass (brownfield)](#add-bucket-instance-name-to-bucketaccessclass-brownfield)
+    - [Motivation](#motivation-1)
+    - [Problems](#problems)
 <!-- /toc -->
+
+# Release Signoff Checklist
+
+- [X] (R) Enhancement issue in release milestone, which links to KEP dir in [kubernetes/enhancements] (not the initial KEP PR)
+- [ ] (R) KEP approvers have approved the KEP status as `implementable`
+- [ ] (R) Design details are appropriately documented
+- [ ] (R) Test plan is in place, giving consideration to SIG Architecture and SIG Testing input
+- [X] (R) Graduation criteria is in place
+- [ ] (R) Production readiness review completed
+- [ ] Production readiness review approved
+- [ ] "Implementation History" section is up-to-date for milestone
+- [ ] User-facing documentation has been created in [kubernetes/website], for publication to [kubernetes.io]
+- [ ] Supporting documentation e.g., additional design documents, links to mailing list discussions/SIG meetings, relevant PRs/issues, release notes
+
+[kubernetes.io]: https://kubernetes.io/
+[kubernetes/enhancements]: https://git.k8s.io/enhancements
+[kubernetes/kubernetes]: https://git.k8s.io/kubernetes
+[kubernetes/website]: https://git.k8s.io/website
+
+
 # Summary
 
 This proposal introduces the *Container Object Storage Interface* (COSI), a system composed of Custom Resources (CRs), APIs for bucket provisioning and access, a controller automation architecture, a gRPC specification, and "COSI node adapter" that interfaces with the kubelet on each node. These components combine to support a standard object storage representation in Kubernetes.  
 
 This KEP describes the above components, defines our goals and target use-cases, and sets the scope of the proposal by defining higher level objectives.  The vocabulary section defines terminology.  Relationships between the APIs are provided to illustrate the interconnections between object storage APIs, users' workloads, and object store service instances.  Lastly, the document describes the proposed API specs, the create and delete workflows, and the gRPC spec.
 
-## Motivation
+# Motivation
 
 File and block are first class citizens within the Kubernetes ecosystem.  Object, though very different under the hood, is a popular means of storing data, especially against very large data sources.   As such, we feel it is in the interest of the community to integrate object storage into Kubernetes, supported by the SIG-Storage community.  In doing so, we can provide Kubernetes cluster users and administrators a normalized and familiar means of managing object storage. 
 
 While absolute portability cannot be guaranteed because of incompatibilities between object store protocols, workloads reliant on a given protocol (e.g. one of S3, GCS, Azure Blob) may be defined in a manifest and deployed wherever that protocol is supported. When a workload (app pod, deployment, configs) is moved to another cluster which supports the basic infrastructure as the original cluster (e.g. namespaces, bucket classes, provisioners, etc.), then the workload can be moved to a new cluster without requiring any changes in the user manifests.
+
+## User Stories
+
+### Admin
+
+- As a cluster administrator, I can control access to new and existing buckets when accessed from the cluster, regardless of the backing object store.
+
+### User
+
+- As a developer, I can define my object storage needs in the same manifest as my workload, so that deployments are streamlined and encapsulated within the Kubernetes interface.
+- As a developer, I can define a manifest containing my workload and object storage configuration once, so that my app may be ported between clusters as long as the storage provided supports my designated data path protocol.
+- As a developer, I want to create a workload controller which is bucket API aware, so that it can dynamically connect workloads to object storage instances.
 
 > Note: this proposal does not include a standardized protocol or abstraction of storage vendor APIs.
 
@@ -100,7 +132,7 @@ While absolute portability cannot be guaranteed because of incompatibilities bet
 + Object store deployment/management is left up to individual vendors.
 + Bucket access lifecycle management is not within the scope of this KEP.  ACLs, access policies, and credentialing need to be handled out-of-band.
 
-##  Vocabulary
+# Vocabulary
 
 + _backend bucket_ - any bucket provided by the object store system, completely separate from Kubernetes.
 + _brownfield bucket_ - an existing backend bucket.
@@ -121,18 +153,6 @@ While absolute portability cannot be guaranteed because of incompatibilities bet
 + _static provisioning_ - custom resource creation is done by the admin rather than via COSI automation. This may also include _driverless_ but they are independent.
 
 # Proposal
-
-## User Stories
-
-#### Admin
-
-- As a cluster administrator, I can control access to new and existing buckets when accessed from the cluster, regardless of the backing object store.
-
-#### User
-
-- As a developer, I can define my object storage needs in the same manifest as my workload, so that deployments are streamlined and encapsulated within the Kubernetes interface.
-- As a developer, I can define a manifest containing my workload and object storage configuration once, so that my app may be ported between clusters as long as the storage provided supports my designated data path protocol.
-- As a developer, I want to create a workload controller which is bucket API aware, so that it can dynamically connect workloads to object storage instances.
 
 ## APIs
 
@@ -425,81 +445,95 @@ spec:
 
 ![Architecture Diagram](COSI%20Architecture_COSI%20architecture.png)
 
-## Workflows
-Here we describe the workflows used to create/provision new or existing buckets and to delete/de-provision buckets.
+# Workflows
+Here we describe the workflows used to automate provisioning of new and existing buckets, and the de-provisioning of these buckets.
 
->  Note: Per [Non-Goals](#non-goals), access management is not within the scope of this KEP.  ACLs, access policies, and credentialing should be handled out of band.
+> Note: when the app pod is started, the kubelet will gRPC call `NodePublishVolume` which is received by the cosi-node-adapter. The pod waits until the adapter responds to the gRPC request. The adapter ensures that the target bucket has been provisioned and is ready to be accessed. And, when the app pod terminates, the kubelet gRPC calls `NodeUnpublishVolume` which the cosi-node-adpater also receives. The adapter orchestrates tear-down of bucket access resources, but does not touch the `BucketRequest` nor `Bucket` instances.
 
-### CreateBucket
+General prep:
++ admin creates the needed bucket classes and bucket access classes.
+
+Prep for brownfield:
++ admin creates `Bucket` instances representing backend buckets.
+
+## Create Bucket
 
 ![CreateBucket Workflow](COSI%20Architecture_Create%20Bucket%20Workflow.png)
 
-_Create_ covers creating a new bucket and/or granting access to an existing bucket. In both cases the `Bucket` and `BucketAccess` resources described above are instantiated.
+This workflow describes the automation supporting creating a new (greenfield) backend bucket. Accessing this bucket is covered in [Sharing COSI Created Buckets](#sharing-cose-created-buckets).
 
-Also, when the app pod is created, the kubelet will gRPC call `NodePublishVolume` which is received by the cosi-node-adapter. The pod hangs until the adapter responds to the gRPC request. The adapter ensures that the target bucket has been provisioned and is ready to be accessed.
-
-"Greenfield" defines a new bucket created based on a user's [BucketRequest](#bucketrequest), and access granted to this bucket.
-“Brownfield” describes any case where access needs to be granted to an existing bucket. In brownfield, this bucket is abstracted by a [Bucket](#Bucket) instance, and expected to be created manually by the admin. There can be multiple `BucketRequests` that bind to a single `Bucket`.
-
-> Note: COSI determines that a request is for a new bucket when an associated `Bucket` instance does not exist.  Consider that `BucketRequest.bucketClassName` can be blank because COSI supports default bucket classes. Also, `BucketRequest.bucketInstanceName` is filled in for brownfield.
-
-Prep for brownfield:
-+ admin creates a `Bucket` with most of the fields filled in.
-+ note that a `BucketClass` is not used for brownfield.
+> Note: COSI determines that a request is for an existing bucket when `BucketRequest.bucketInstanceName` is specified. How the user knows the `Bucket` instance name is not defined by COSI.
 
 Here is the workflow:
 
-+ COSI central controller detects a new `BucketRequest` (BR).
-+ COSI central controller detects a new `BucketAccessRequest`(BAR).
-+ COSI gets the `BR.BucketClass` (directly or via the matching default).
-+ COSI gets the `BAR.bucketAccessClass` object.
-+ COSI creates the associated `Bucket`, after filling in a template consisting of fields from the `BucketClass` and BR.
-  + If this create operation fails due to the `Bucket` already existing, then we have a brownfield case; otherwise it's greenfield.  **Note:** the goal here is to reduce separate greenfield vs. brownfield logic in the code.
-+ COSI creates the associated `BucketAccess` (BA), after filling in a template consisting of fields from the `BucketAccessClass` and BAR.
-+ For a newly created `Bucket`, the sidecar sees it and gRPC calls the driver to create a bucket.
-+ COSI is done with the `BucketRequest`, but there is no binding until the `BucketAccess` instance is created for the associated `BucketAccessRequest`.
-+ The sidecar sees the newly created BA and gRPC calls the driver to grant access.
-+ COSI sees the completed BA which triggers binding the BA in `Bucket`.
++ COSI central controller sees a new `BucketRequest` (BR).
++ COSI gets the `BR.BucketClass` (directly or via the matching default) and verifies that the BR's namespace is allowed.
++ If BR.bucketInstanceName is empty, COSI creates the associated `Bucket`, filling in fields from the `BucketClass` and BR. Else, we have a brownfield BR.
++ The sidecar sees the new `Bucket` and gRPC calls the driver to create a backend bucket.
++ COSI updates the BR and `Bucket` instance to reference each other.
 
-+ Depending on when the app pod was started, the kubelet call `NodePublishVolume` and waits for the response from the cosi-node-adapter.
-+ The cosi-node-adaper sees the `NodePublishVolume` request and is passed the `BucketRequest` and `BucketAccessRequest` names and namespace.
-+ The adapter gets the corresponding `Bucket` and `BucketAccess` instances, and verifies that the BA has been bound.
-+ The adapter creates the host files for the secret and endpoint info.
-+ At this point the adapter responds to the `NodePublishVolume` request and the kubelet continues to launch the pod
+## Sharing COSI Created Buckets
+This is the greenfield -> brownfield access use case, where COSI has created the `Bucket` instance and the driver has provisioned a new bucket. Now, we want to share access to this bucket in other namespaces.
 
-##### Sharing Dynamically Created Buckets (green-brown)
-Once a `Bucket` is created, it is discoverable by other users in the cluster (who have been granted the ability to list `Bucket`s or via non-automated methods).  In order to access the `Bucket`, a user must create a `BucketRequest` (BR) that specifies the `Bucket` instance by name. This `BucketRequest` should not specify a `BucketClass` since the `Bucket` instance already exists.
-The user also needs to creates a `BucketAccessRequest` (BAR), which references the BR. At this point the workflow is the same as above.
+> Note: if the bucket sharing is all within the same namespace then each `BucketAccessRequest` (also in that namespace) only needs to reference the existing BR.
 
-### DeleteBucket
+Here is the workflow:
+
++ A `Bucket` instance created by COSI must be cloned by the admin (each `Bucket` instance needs a unique name).
++ The user creates a `BucketRequest` (BR) that specifies the `Bucket` instance name (BR.bucketInstanceName) provided by the admin.
++ The user creates a `BucketAccessRequest` (BAR) - see [grant bucket access](#grant-bucket-access) -- and the BAR references their BR.
+
+## Delete Bucket
 
 ![DeleteBucket Workflow](COSI%20Architecture_Delete%20Bucket%20Workflow.png)
 
-_Delete_ covers deleting a bucket and/or revoking access to a bucket. A `Bucket` delete is triggered by the user deleting their `BucketRequest`. A `BucketAccess` removal is triggered by the user deleting their `BucketAccessRequest`. A bucket is not deleted if there are any bindings (accessors). Once all bindings have been removed the `Bucket` is marked unavailable, **and** if the retention policy is "Delete", then the sidecar will gRPC call the provisioner's _Delete_ interface. It's up to each provisioner whether or not to physically delete bucket content, but the expectation is that the physical bucket will at least be made unavailable.
+This workflow describes the automation designed for deleting a `Bucket` instance and optionally the related backend bucket. Revoking access to this bucket is covered in [Revoke Bucket Access](#revoke-bucket-access).
 
-Also, when the app pod terminates, the kubelet will gRPC call `NodeUnpublishVolume` which is received by the cosi-node-adapter. The adapter will ensure that the access granted to this pod is removed, and if this pod is the last accessor, then depending on the bucket's _retentionPolicy, the bucket may be deleted.
+A `Bucket` delete is triggered by the user deleting their `BucketRequest`. A `Bucket` instance (and a backend bucket) is not deleted if an associated `BucketAccess` or `BucketRequest` exists. Once these references have been deleted the `Bucket`, **and** if the retention policy is "Delete", the backend bucket, will be deleted. It's up to each provisioner whether or not to physically delete bucket content. But, for idempotency, the expectation is that the backend bucket will at least be made unavailable, pending out-of-band bucket lifecycle policies.
 
-> Note: a brownfield `BucketRequest` is not honored if the associated `Bucket`'s _deleteTimestamp_ is set.
+> Note: delete is described below as a synchronous workflow but it will likely need to be implemented asynchronously to accommodate potentially long delete times when buckets contain many objects. The steps should still mostly follow what's outlined below.
 
-> Note: delete is described below as a synchronous workflow but it will likely need to be implemented asynchronously. The steps should still mostly follow what's outlined below.
+Here is the workflow:
 
-These are the common steps to delete a `Bucket`. Note: there are atypical workflows where an admin deletes a `Bucket` or a `BucketAccess` instance which are not described here:
-+ User deletes their `BucketRequest` (BR) which "hangs" until finalizers have been removed and the BR can finally be deleted.
-+ User deletes their `BucketAccessRequest` (BAR) which "hangs" until finalizers have been removed and the BAR can finally be deleted.
-+ COSI central controller sees the BR.deleteTimestamp and the BAR.deleteTimestamp are set.
-+ COSI deletes the associated `Bucket`, which sets its deleteTimestamp but does not delete it due to finalizer.
-+ COSI deletes the associated `BucketAccess` (BA), which sets its deleteTimestamp but does not delete it due to finalizer.
-+ Sidecar sees the deleteTimestamp set in the `BucketAccess` and gRPC calls the provisoner's _Revoke_ interface.
-+ COSI unbinds the BA from the `Bucket`.
-+ COSI checks for additional binding references and if there are any we stop processing the BR delete (but continue processing the BAR delete).
-+ Sidecar sees the `Bucket` is released and knows the `Bucket.retentionPolicy`.
-+ If the retention policy is "Delete", the sidecar gRPC calls the provisoner's _Delete_ interface, and upon successful completion, updates the `Bucket` to Deleted.
++ User deletes their `BucketRequest` (BR) which is deferred until finalizers have been removed.
++ COSI gets the `Bucket` instance from the BR and notes the retention policy.
++ If the `Bucket` instance was created by COSI then COSI deletes the `Bucket`, which sets its deleteTimestamp but does not delete it due to finalizer.
++ If the `Bucket` instance was not created by COSI then the `Bucket` is not deleted, but finalizers are removed so that the admin can manually delete it.
++ COSI unbinds the BR from the `Bucket`.
++ COSI checks the BA-Bucket binding, and if present, stops processing the BR delete, meaning a `Bucket` instance cannot be deleted if its BA is present.
++ Sidecar sees the `Bucket` is unbound, and if the retention policy is "Delete", the gRPC calls the provisoner's _Delete_ interface. Upon successful completion, the `Bucket` is updated to Deleted.
 + If the retention policy is "Retain" then the `Bucket` remains "Released" and it can potentially be reused.
-+ When the COSI controller sees the `Bucket` is "Deleted", it deletes all the finalizers and the real deletions occur.
++ When COSI sees the `Bucket` is "Deleted", it deletes all the finalizers and the real deletions occur.
 
-###  Setting Access Permissions
-#### Dynamic Provisioning
-Incoming `BucketAccessRequest` either contains a *serviceAccountName* where a cloud provider supports identity integration, or an *accessSecretName*. In both cases, the incoming `BucketAccessRequest` represents a user to access the `Bucket`.
+## Grant Bucket Access
+This workflow describes the automation supporting granting access to an existing backend bucket.
+
+Here is the workflow:
+
++ The admin creates a cluster-scoped `Bucket` representing the backend bucket.
++ The user creates a `BucketRequest` referencing this `Bucket` instance and COSI follows the "Create Bucket" workflow.
++ The user creates a `BucketAccessRequest` (BAR) which references their BR.
++ COSI central controller sees a new `BucketAccessRequest` (BAR) and gets the `BAR.BucketAccessClass` (BAC).
++ COSI creates the cluster-scoped `BucketAccess` (BA) filling in the field from the BAR and BAC.
++ The sidecar sees the new BA and gRPC calls the driver to grant access to the backend bucket.
++ COSI updates the BAR and BA to reference each other.
++ The cosi-node-adapter, which has been waiting for the BAR to be processed, writes access tokens to the app pod's specified mount point.
+
+## Revoke Bucket Access
+This workflow describes the automation supporting revoking access to an existing backend bucket, and the deletion of the cluster-scoped `BucketAccess` instance.
+
+Here is the workflow:
+
++ COSI central controller sees the `BucketAccessRequest` (BAR) has been deleted.
++ COSI gets the `BAR.BucketAccess` (BA).
++ COSI deletes the BA, but finalizers prevent it from being garbage collected.
++ The sidecar sees the BA has been deleted and gRPC calls the driver to revoke access to the backend bucket.
++ COSI removes the BAR and BA finalizers and these instances are garbage collected.
+
+
+##  Setting Access Permissions
+### Dynamic Provisioning
+Incoming `BucketAccessRequest`s either contain a *serviceAccountName* where a cloud provider supports identity integration, or an *accessSecretName*. In both cases, the incoming `BucketAccessRequest` represents a user to access the `Bucket`.
 When requesting access to a bucket, workloads will go through the following  scenarios described here:
 +  New User: In this scenario, we do not have user account in the backend storage system as well as no access for this user to the `Bucket`. 
 	+ Create user account in the backend storage system.
@@ -515,7 +549,7 @@ When requesting access to a bucket, workloads will go through the following  sce
 	
 Upon success, the `BucketAccess` instance is ready and the app workload can access backend storage.
 
-#### Static Provisioning
+### Static Provisioning
 Driverless Mode allows the existing workloads to make use of COSI without the need for Vendors to create drivers. The following steps show the details of the workflow:
 + Admin creates `Bucket` instance.
 + Admin creates `BucketAccess` instance.
@@ -527,7 +561,7 @@ Driverless Mode allows the existing workloads to make use of COSI without the ne
 
 ---
 
-## Provisioner Secrets
+# Provisioner Secrets
 
 Per [Non-Goals](#non-goals), it is not within the scope of the proposal to abstract IAM operations.  Instead, provisioner and user credentials should be provided to automation by admins or users.  
 To allow for flexibility in authorizing provisioner operations, credentials may be provided to the provisioner in several ways.
@@ -565,7 +599,7 @@ cosi.io/provisioner-secret-namespace:
   ```
 ---
 
-### gRPC Definitions
+# gRPC Definitions
 
 There is one service defined by COSI - `Provisioner`. This will need to be satisfied by the vendor-provisioner in order to be COSI-compatible
 
@@ -581,7 +615,7 @@ service Provisioner {
 }
 ```
 
-#### ProvisionerGetInfo
+## ProvisionerGetInfo
 
 This call is meant to retrieve the unique provisioner Identity. This identity will have to be set in `BucketRequest.Provisioner` field in order to invoke this specific provisioner.
 
@@ -595,7 +629,7 @@ message ProvisionerGetInfoResponse {
 }
 ```
 
-#### ProvisonerCreateBucket
+## ProvisonerCreateBucket
 
 This call is made to create the bucket in the backend. If the bucket already exists, then the appropriate error code `ALREADY_EXISTS` must be returned by the provisioner.
 
@@ -621,7 +655,7 @@ message ProvisionerCreateBucketResponse {
 }
 ```
 
-#### ProvisonerDeleteBucket
+## ProvisonerDeleteBucket
 
 This call is made to delete the bucket in the backend. If the bucket has already been deleted, then no error should be returned.
 
@@ -638,7 +672,7 @@ message ProvisionerDeleteBucketResponse {
 }
 ```
 
-#### ProvisionerGrantBucketAccess
+## ProvisionerGrantBucketAccess
 
 This call grants access to a particular principal. Note that the principal is the account for which this access should be granted. 
 
@@ -670,7 +704,7 @@ message ProvisionerGrantBucketAccessResponse {
 } 
 ```
 
-#### ProvisionerRevokeBucketAccess
+## ProvisionerRevokeBucketAccess
 
 This call revokes all access to a particular bucket from a principal.  
 
@@ -690,7 +724,7 @@ message ProvisionerRevokeBucketAccessResponse {
 }
 ```
 
-## Test Plan
+# Test Plan
 
 - Unit tests will cover the functionality of the controllers.
 - Unit tests will cover the new APIs.
@@ -699,9 +733,9 @@ message ProvisionerRevokeBucketAccessResponse {
 - Tests need to cover both correctly and incorrectly configured cases.
 
 
-## Graduation Criteria
+# Graduation Criteria
 
-### Alpha
+## Alpha
 
 - API is reviewed and accepted
 - Implement all COSI components to support Greenfield, Green/Brown Field, Brownfield and Static Driverless provisioning
@@ -709,17 +743,17 @@ message ProvisionerRevokeBucketAccessResponse {
 - Develop unit test cases to demonstrate that the above mentioned use cases work correctly
 
 
-## Alternatives Considered
+# Alternatives Considered
 This KEP has had a long journey and many revisions. Here we capture the main alternatives and the reasons why we decided on a different solution.
 
-### Add Bucket Instance Name to BucketAccessClass (brownfield)
+## Add Bucket Instance Name to BucketAccessClass (brownfield)
 
-#### Motivation
+### Motivation
 1. To improve workload _portability_ user namespace resources should not reference non-deterministic generated names. If a `BucketAccessRequest` (BAR) references a `Bucket` instance's name, and that name is psuedo random (eg. a UID added to the name) then the BAR, and hence the workload deployment, is not portable to another cluser.
 
 1. If the `Bucket` instance name is in the BAC instead of the BAR then the user is not burdened with knowledge of `Bucket` names, and there is some centralized admin control over brownfield bucket access.
 
-#### Problems
+### Problems
 1. The greenfield -> brownfield workflow is very awkward with this approach. The user creates a `BucketRequest` (BR) to provision a new bucket which they then want to access. The user creates a BAR pointing to a BAC which must contain the name of this newly created ``Bucket` instance. Since the `Bucket`'s name is non-deterministic the admin cannot create the BAC in advance. Instead, the user must ask the admin to find the new `Bucket` instance and add its name to new (or maybe existing) BAC.
 
 1. App portability is still a concern but we believe that deterministic, unique `Bucket` and `BucketAccess` names can be generated and referenced in BRs and BARs.
