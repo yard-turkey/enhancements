@@ -128,9 +128,9 @@ While absolute portability cannot be guaranteed because of incompatibilities bet
 
 ## Non-Goals
 
-+ Defining the _data-plane_ object store interface to replace or supplement existing vendor protcols/APIs is not within scope.
++ Defining the _data-plane_ object store interface to replace or supplement existing vendor protocols/APIs is not within scope.
 + Object store deployment/management is left up to individual vendors.
-+ Bucket access lifecycle management is not within the scope of this KEP.  ACLs, access policies, and credentialing need to be handled out-of-band.
++ Bucket access lifecycle management is not within the scope of this KEP.  ACLs, access policies, and credentials need to be handled out-of-band.
 
 # Vocabulary
 
@@ -143,12 +143,12 @@ While absolute portability cannot be guaranteed because of incompatibilities bet
 + _BucketAccessClass (BAC)_ - a cluster-scoped custom resource containing fields defining the provisioner and a ConfigMap reference where policy is defined.
 + _COSI_ - Container _Object_ Store Interface, modeled after CSI.
 + _cosi-node-adapter_ - a pod per node which receives Kubelet gRPC _NodePublishVolume_ and _NodeUnpublishVolume_ requests, ensures the target bucket has been provisioned, and notifies the kubelet when the pod can be run.
-+ _driver_ - a container (usually paired with a sidecar container) that is reponsible for communicating with the underlying object store to create, delete, grant access to, and revoke access from buckets. Drivers talk gRPC and need no knowledge of Kubernetes. Drivers are typically written by storage vendors, and should not be given any access outside of their namespace.
++ _driver_ - a container (usually paired with a sidecar container) that is responsible for communicating with the underlying object store to create, delete, grant access to, and revoke access from buckets. Drivers talk gRPC and need no knowledge of Kubernetes. Drivers are typically written by storage vendors, and should not be given any access outside of their namespace.
 + _driverless_ - a system where no driver is needed to automate bucket provisioning. COSI automation may still be deployed to managed COSI APIs.
 + _greenfield bucket_ - a new backend bucket created by COSI.
 + _green-to-browfield_ - a use-case where COSI creates a new bucket on behalf of a user, and then supports ways for other users in the cluster to share this bucket.
 + _provisioner_ - a generic term meant to describe the combination of a sidecar and driver. "Provisioning" a bucket can mean creating a new bucket or granting access to an existing bucket.
-+ _sidecar_ - a Kubernetes-aware container (usually paired with a driver) that is reponsible for fullfilling COSI requests with the driver via gRPC calls. The sidecar's access can be restricted to the namespace where it resides, which is expected to be the same namespace as the provisioner. The COSI sidecar is provided by the Kubernetes community.
++ _sidecar_ - a Kubernetes-aware container (usually paired with a driver) that is responsible for fulfilling COSI requests with the driver via gRPC calls. The sidecar's access can be restricted to the namespace where it resides, which is expected to be the same namespace as the provisioner. The COSI sidecar is provided by the Kubernetes community.
 + _storage instance_ - refers to the back object storage endpoint being abstracted by the Bucket API (a.k.a “bucket” or “container”).
 + _static provisioning_ - custom resource creation is done by the admin rather than via COSI automation. This may also include _driverless_ but they are independent.
 
@@ -334,7 +334,7 @@ status:
 ```
 
 1. `labels`: added by COSI.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
-1. `finalizers`: added by COSI to defer `BucketAccessRequest` deletion until backend deletion ops succeed.
+1. `finalizers`: added by COSI to defer `BucketAccessRequest` deletion until backend deletion operation succeed.
 1. `serviceAccountName`: (optional) the name of a Kubernetes ServiceAccount in the same namespace.  This field is included to support cloud provider identity integration. When supplied, COSI will call the driver to mint new credentials for this ServiceAccount. `serviceAccountName` should not be set when specifying `accessSecretName`.
 1. `accessSecretName`: (optional) the name of a secret in the same namespace.  This field is used when there is no cloud provider identity integration, or the user already has credentials for the backend object store. When supplied, COSI assumes that access is granted to the bucket referenced in the `BucketRequest`, and, thus will not invoke the driver. `accessSecretName` should not be set when specifying `serviceAccountName`.
 1. `bucketRequestName`: the name of the `BucketRequest` associated with this access request. From the bucket request, COSI knows the `Bucket` instance and thus the backend bucket and its properties.
@@ -374,7 +374,7 @@ metadata:
 
 1. `name`: the BA name is generated by COSI in this format: _"<BAR.namespace*>-<BAR.name*>-<uuid>"_. The uuid is unique within a cluster. `*` the first 10 characters of the namespace and the name are used.
 1. `labels`: added COSI.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
-1. `finalizers`: added by COSI to defer `BucketAccess` deletion until backend deletion ops succeed.
+1. `finalizers`: added by COSI to defer `BucketAccess` deletion until backend deletion operation succeed.
 1. `provisioner`:  name of the provisioner that should handle this `BucketAccess` instance.  Copied from the `BucketAccessClass`.
 1. `bucketInstanceName`:  name of the `Bucket` instance bound to this BA.
 1. `bucketAccessRequest`: name and namespace of the bound `BucketAccessRequest`.
@@ -408,7 +408,7 @@ parameters: [3]
 ---
 
 ### App Pod
-The application pod utilizes CSI's inline empheral volume support to provide the endpoint and secret credentials in an in-memory volume. This approach also, importantly, prevents the pod from launching before the bucket has been provisioned since the kubelet waits to start the pod until it has received the cosi-node-adpater's `NodePublishVolume` response.
+The application pod utilizes CSI's inline ephemeral volume support to provide the endpoint and secret credentials in an in-memory volume. This approach also, importantly, prevents the pod from launching before the bucket has been provisioned since the kubelet waits to start the pod until it has received the cosi-node-adpater's `NodePublishVolume` response.
 
 Here is a sample pod manifest:
 
@@ -433,13 +433,13 @@ spec:
         volumeAttributes: [5]
           bucketAccessRequestName: <my-bar-name>
 ```
-1. the service account may be needed depending on cloud IAM intergration with kubernetes.
+1. the service account may be needed depending on cloud IAM integration with kubernetes.
 1. the mount path is the directory where the app will read the credentials and endpoint.
 1. this is an inline CSI volume.
 1. the name of the cosi-node-adapter.
 1. information needed by the cosi-node-adapter to verify that the bucket has been provisioned.
 
-> Note: `VolumeLifeCycleModes` needs to be set to "empheral" for inline COSI node adapter.
+> Note: `VolumeLifeCycleModes` needs to be set to "ephemeral" for inline COSI node adapter.
 
 ### Topology
 
@@ -751,7 +751,7 @@ This KEP has had a long journey and many revisions. Here we capture the main alt
 ## Add Bucket Instance Name to BucketAccessClass (brownfield)
 
 ### Motivation
-1. To improve workload _portability_ user namespace resources should not reference non-deterministic generated names. If a `BucketAccessRequest` (BAR) references a `Bucket` instance's name, and that name is psuedo random (eg. a UID added to the name) then the BAR, and hence the workload deployment, is not portable to another cluser.
+1. To improve workload _portability_ user namespace resources should not reference non-deterministic generated names. If a `BucketAccessRequest` (BAR) references a `Bucket` instance's name, and that name is psuedo random (eg. a UID added to the name) then the BAR, and hence the workload deployment, is not portable to another cluster.
 
 1. If the `Bucket` instance name is in the BAC instead of the BAR then the user is not burdened with knowledge of `Bucket` names, and there is some centralized admin control over brownfield bucket access.
 
