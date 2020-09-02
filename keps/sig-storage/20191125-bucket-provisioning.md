@@ -65,6 +65,8 @@ status: provisional
       - [ProvisionerGrantBucketAccess](#provisionergrantbucketaccess)
       - [ProvisionerRevokeBucketAccess](#provisionerrevokebucketaccess)
   - [Test Plan](#test-plan)
+  - [Graduation Criteria](#graduation-criteria)
+    - [Alpha](#alpha)
   - [Alternatives Considered](#alternatives-considered)
     - [Add Bucket Instance Name to BucketAccessClass (brownfield)](#add-bucket-instance-name-to-bucketaccessclass-brownfield)
       - [Motivation](#motivation-1)
@@ -695,6 +697,17 @@ message ProvisionerRevokeBucketAccessResponse {
 - An end-to-end test suite will cover testing all the components together.
 - Component tests will cover testing each controller in a blackbox fashion.
 - Tests need to cover both correctly and incorrectly configured cases.
+
+
+## Graduation Criteria
+
+### Alpha
+
+- API is reviewed and accepted
+- Implement all COSI components to support Greenfield, Green/Brown Field, Brownfield and Static Driverless provisioning
+- Evaluate gaps, update KEP and conduct reviews for all design changes 
+- Develop unit test cases to demonstrate that the above mentioned use cases work correctly
+
 
 ## Alternatives Considered
 This KEP has had a long journey and many revisions. Here we capture the main alternatives and the reasons why we decided on a different solution.
