@@ -475,6 +475,8 @@ Here is the workflow:
 ## Sharing COSI Created Buckets
 This is the greenfield -> brownfield access use case, where COSI has created the `Bucket` instance and the driver has provisioned a new bucket. Now, we want to share access to this bucket in other namespaces.
 
+![ShareBucket Workflow](COSI%20Architecture_Share%20Bucket%20Workflow.png)
+
 > Note: if the bucket sharing is all within the same namespace then each `BucketAccessRequest` (also in that namespace) only needs to reference the existing BR.
 
 Here is the workflow:
