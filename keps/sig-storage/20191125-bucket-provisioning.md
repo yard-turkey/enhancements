@@ -445,6 +445,12 @@ spec:
 
 ![Architecture Diagram](COSI%20Architecture_COSI%20architecture.png)
 
+# Object Relationships
+
+The diagram below describes the relationships between various resources in the COSI ecosystem. 
+
+![Object Relationships](COSI%20Architecture_Object%20Relationships.png)
+
 # Workflows
 Here we describe the workflows used to automate provisioning of new and existing buckets, and the de-provisioning of these buckets.
 
