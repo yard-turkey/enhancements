@@ -35,7 +35,6 @@
   - [Setting Access Permissions](#setting-access-permissions)
     - [Dynamic Provisioning](#dynamic-provisioning)
     - [Static Provisioning](#static-provisioning)
-- [Provisioner Secrets](#provisioner-secrets)
 - [gRPC Definitions](#grpc-definitions)
   - [ProvisionerGetInfo](#provisionergetinfo)
   - [ProvisonerCreateBucket](#provisonercreatebucket)
@@ -148,12 +147,13 @@ metadata:
   name:
   namespace:
   labels:
-    cosi.io/provisioner: [1]
+    - cosi.io/provisioner: [1]
   finalizers:
     - cosi.io/finalizer [2]
 spec:
-  protocol: [3]
-  protocolVersion: [4]
+  protocol:
+    name: [3]
+    version: [4]
   bucketPrefix: [5]
   bucketClassName: [6]
   bucketInstanceName: [7]
@@ -163,18 +163,18 @@ status:
 
 1. `labels`: added by COSI.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
 1. `finalizers`: added by COSI to defer `BucketRequest` deletion until backend deletion succeeds.
-1. `protocol`: (required) specifies the desired protocol.  One of {“s3”, “gcs”, or “azureBlob”}.
-1. `protocolVersion`: (optional) specifies the desired version of the `protocol`. For "s3", a value of "v2" or "v4" could be used. This field is a place-holder for version matching.
-1. `bucketPrefix`: (optional) prefix prepended to a COSI-generated new bucket name, eg. “yosemite-photos-". If `bucketInstanceName` is supplied then `bucketPrefix` is ignored because the request is for access to an existing bucket. If `bucketPrexix` is specified then it is added to the `Bucket` instance as a label.
-1. `bucketClassName`: (optional) name of the `BucketClass` used to provision this request. If omitted, a default bucket class matching the protocol is used. If the bucket class does not support the requested protocol, an error is logged and the request is retried (with exponential backoff). A `BucketClass` is required for both greenfield and brownfield requests since BCs support a list of allowed namespaces.
+1. `protocol.name`: (required) specifies the desired protocol.  One of {“s3”, “gcs”, or “azureBlob”}.
+1. `protocol.version`: (optional) specifies the desired version of the `protocol`. For "s3", a value of "v2" or "v4" could be used. 
+1. `bucketPrefix`: (optional) prefix prepended to a generated new bucket name, eg. “yosemite-photos-". If `bucketInstanceName` is supplied then `bucketPrefix` is ignored because the request is for access to an existing bucket. If `bucketPrexix` is specified then it is added to the `Bucket` instance as a label.
+1. `bucketClassName`: (optional for greenfield, omitted for brownfield) name of the `BucketClass` used to provision this request. If omitted for a greenfield bucket request, a default bucket class matching the protocol, if available, is used. If the greenfield bucket class does not support the requested protocol, an error is logged and the request is retried (with exponential backoff). A `BucketClass` is necessary for greenfield requests since BCs support a list of allowed namespaces. A `BucketClass` is not needed for brownfield requests since the `Bucket` instance, created by the admin, also contains `allowedNamespaces`.
 1. `bucketInstanceName`: (optional) name of the cluster-wide `Bucket` instance. If blank, then COSI assumes this is a greenfield request and will fill in the name during the binding step. If defined by the user, then this names the `Bucket` instance created by the admin. There is no automation available to make this name known to the user.
 1. `bucketAvailable`: if true the bucket has been provisioned. If false then the bucket has not been provisioned and is unable to be accessed.
 
 #### Bucket
 
-A cluster-scoped custom resource representing the abstraction of a single backend bucket. A `Bucket` instance stores enough identifying information so that drivers can accurately target the backend object store (e.g. needed during a deletion process).  Many of the associated bucket class fields are copied to the `Bucket`. Additionally, endpoint data returned by the driver is copied to the `Bucket` by the sidecar.
+A cluster-scoped custom resource representing the abstraction of a single backend bucket. A `Bucket` instance stores enough identifying information so that drivers can accurately target the backend object store (e.g. needed during a deletion process).  All of the associated bucket class fields are copied to the `Bucket`. Additionally, endpoint data returned by the driver is copied to the `Bucket` by the sidecar.
 
-For greenfield, COSI creates the `Bucket` based on values in the `BucketRequest` and `BucketClass`. For brownfield, an admin manually creates the `Bucket` and COSI copies bucket class fields, populates fields returned by the provisioner, and binds the `Bucket` to the `BucketAccess`.
+For greenfield, COSI creates the `Bucket` based on values in the `BucketRequest` and `BucketClass`. For brownfield, an admin manually creates the `Bucket`, filling in BucketClass fields, such as `allowedNamespaces`. COSI populates fields returned by the provisioner, and binds the `Bucket` to the `BucketAccess`.
 
 Since there is a 1:1 mapping between a BR and a `Bucket`, when multiple BRs request access to the same backend bucket, each separate `Bucket` points to the same backend bucket.
 
@@ -197,12 +197,12 @@ spec:
   allowedNamespaces: [9]
     - name:
   protocol: [10]
-    protocolSignature: ""
+    name:
+    version:
     azureBlob:
       containerName:
       storageAccount:
     s3:
-      version:
       endpoint:
       bucketName:
       region:
@@ -212,7 +212,6 @@ spec:
       privateKeyName:
       projectId:
       serviceAccount:
-    - name:
   parameters: [11]
 status:
   bucketAvailable: [12]
@@ -238,11 +237,12 @@ status:
 7. `bucketClassName`: Name of the associated bucket class.
 8. `bucketRequest`: an `objectReference` containing the name, namespace and UID of the associated `BucketRequest`.
 9. `allowedNamespaces`: a list of namespaces that are permitted to either create new buckets or to access existing buckets.
-10. `protocol`: The protocol the application will use to access the backend storage.
-   - `protocolSignature`: Specifies the protocol targeted by this Bucket instance.  One of:
-     - `azureBlob`: data required to target a provisioned azure container and/or storage account.
-     - `s3`: data required to target a provisioned S3 bucket and/or user.
-     - `gcs`: data required to target a provisioned GCS bucket and/or service account.
+10. `protocol`: protocol-specific field the application will use to access the backend storage.
+     - `name`: supported protocols are: "s3", "gcs", and "azureBlob".
+     - `version`: version being used by the backend storage.
+     - `azureBlob`: data required to target a provisioned azure container.
+     - `gcs`: data required to target a provisioned GCS bucket.
+     - `s3`: data required to target a provisioned S3 bucket.
 11. `parameters`: a copy of the BucketClass parameters.
 12. `bucketAvailable`: if true the bucket has been provisioned. If false then the bucket has not been provisioned and is unable to be accessed.
 
@@ -282,7 +282,7 @@ parameters: [7]
 > Note: the `Bucket`'s retention policy is set to "Retain" as a default. Exercise caution when using the "Delete" retention policy as the bucket content will be deleted.
 > Note: a `Bucket` is not deleted if it is bound to a `BucketRequest` or `BucketAccess`.
 6. `allowedNamespaces`: a list of namespaces that are permitted to either create new buckets or to access existing buckets. This list is static for the life of the `BucketClass`, but the `Bucket` instance's list of allowed namespaces can be mutated by the admin.
-7. `parameters`: (optional) a map of string:string key values.  Allows admins to set provisioner key-values.  **Note:** see [Provisioner Secrets](#provisioner-secrets) for some predefined `parameters` settings.
+7. `parameters`: (optional) a map of string:string key values.  Allows admins to set provisioner key-values.
 
 ### Access APIs
 
@@ -562,42 +562,6 @@ Upon success, the `BucketAccess` instance is ready and the app workload can acce
 + COSI detects the existence of the BAR, BA and executes a validation process.
 + As a validation step, COSI ensures that the `BucketRequest.bucketInstanceName` matches the `BucketAccessRequest.bucketAccessName.bucketInstanceName`. In other words, the two related `Bucket` references match, meaning that the BR and BAR->BA point to the same `Bucket`.
 
-# Provisioner Secrets
-
-Per [Non-Goals](#non-goals), it is not within the scope of the proposal to abstract IAM operations.  Instead, provisioner and user credentials should be provided to automation by admins or users.  
-To allow for flexibility in authorizing provisioner operations, credentials may be provided to the provisioner in several ways.
-
-- **Per Provisioner:** the Secret is used for all provisioning operations, for the lifetime of the provisioner.  These Secrets should be injected directly into the provisioner's container via [common Kubernetes patterns](https://kubernetes.io/docs/tasks/inject-data-application/distribute-credentials-secure/).
-
-Credentials may also be specified at more granular levels in order to allow for context dependent keys.  E.g. When authorization differs between BucketClasses or between individual operations.  This may be facilitated by defining a set of string keys which the core automation will be aware of, so that Secrets may be referenced by BucketClasses.  For example:
-
-```
-cosi.io/provisioner-secret-name:
-cosi.io/provisioner-secret-namespace:
-```
-
-- **Per BucketClass:** A secret may be made specific to a BucketClass.  This suits cases where authorization may be segregated in the object store.  The Secret may then be defined explicitly in the `bucketClass.parameters` map.
-
-  ```
-  cosi.io/provisioner-secret-name: "foo"
-  cosi.io/provisioner-secret-namespace: "bar"
-  ```
-
-- **Per Operation/Bucket:** Unique credentials are passed per Bucket or operation. In order to support dynamic Secret naming, templating similar to [CSI Secret templating](https://kubernetes-csi.github.io/docs/secrets-and-credentials-storage-class.html) may be used.  E.g.
-
-  ```
-  "${bucket.name}"
-  "${bucket.namespace}"
-  ```
-  
-  Admins may then define a BucketClass with the following parameters included:
-
-  *Per Bucket Operation*
-  
-  ```
-  cosi.io/provisioner-secret-name: "${bucket.name}"
-  cosi.io/provisioner-secret-namespace: "${bucket.namespace}"
-  ```
 ---
 
 # gRPC Definitions

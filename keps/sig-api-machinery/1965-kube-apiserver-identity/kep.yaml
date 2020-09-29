@@ -1,48 +1,39 @@
-title: Warning mechanism for use of deprecated APIs
-kep-number: 1693
+title: kube-apiserver identity
+kep-number: 1965
 authors:
-  - "@liggitt"
+  - "@roycaihw"
 owning-sig: sig-api-machinery
-participating-sigs:
-  - sig-architecture
-  - sig-cli
-  - sig-instrumentation
-status: implementable
-creation-date: 2020-04-16
+status: provisional
+creation-date: 2020-09-02
 reviewers:
+  - "@caesarxuchao"
   - "@lavalamp"
+  - "@MikeSpreitzer"
   - "@deads2k"
-  - "@seans3"
-  - "@logicalhan"
 approvers:
   - "@lavalamp"
-  - "@smarterclayton"
+  - "@deads2k"
 see-also:
-  - "/keps/sig-architecture/1635-prevent-permabeta"
+  - "https://docs.google.com/document/d/1ed7miqlFY7-9lZxE7gzoyx_MFQCtFEDqtcKMpaAmHys/edit?usp=sharing"
 
 # The target maturity stage in the current dev cycle for this KEP.
-# stage: alpha|beta|stable
-stage: beta
+stage: alpha
 
 # The most recent milestone for which work toward delivery of this KEP has been
 # done. This can be the current (upcoming) milestone, if it is being actively
 # worked on.
-# latest-milestone: "v1.19"
-latest-milestone: "v1.19"
+latest-milestone: "v1.20"
 
 # The milestone at which this feature was, or is targeted to be, at each stage.
 milestone:
-  beta: "v1.19"
-  stable: "v1.21"
+  alpha: "v1.20"
+  beta: "v1.21"
+  stable: "v1.22"
 
 # The following PRR answers are required at alpha release
 # List the feature gate name and the components for which it must be enabled
 feature-gates:
-  - name: WarningHeaders
+  - name: APIServerIdentity
     components:
       - kube-apiserver
 disable-supported: true
-
-# The following PRR answers are required at beta release
-metrics:
-  - apiserver_requested_deprecated_apis
