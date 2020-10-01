@@ -56,7 +56,7 @@
 - [ ] (R) KEP approvers have approved the KEP status as `implementable`
 - [ ] (R) Design details are appropriately documented
 - [ ] (R) Test plan is in place, giving consideration to SIG Architecture and SIG Testing input
-- [X] (R) Graduation criteria is in place
+- [ ] (R) Graduation criteria is in place
 - [ ] (R) Production readiness review completed
 - [ ] Production readiness review approved
 - [ ] "Implementation History" section is up-to-date for milestone
@@ -123,7 +123,7 @@ When a workload (app pod, deployment, configs) is moved to another cluster, as l
 + _driver_ - a container (usually paired with a sidecar container) that is responsible for communicating with the underlying object store to create, delete, grant access to, and revoke access from buckets. Drivers talk gRPC and need no knowledge of Kubernetes. Drivers are typically written by storage vendors, and should not be given any access outside of their namespace.
 + _driverless_ - a use-case where no driver exists to support the backend object store. Some COSI automation may still be provided, but backend operations such as creating a bucket or minting credentials will not occur.
 + _greenfield bucket_ - a new backend bucket created by COSI.
-+ _green-to-browfield_ - a use-case where COSI creates a new bucket on behalf of a user, and then supports ways for other users in the cluster to share this bucket.
++ _green-to-brownfield_ - a use-case where COSI creates a new bucket on behalf of a user, and then supports ways for other users in the cluster to share this bucket.
 + _provisioner_ - a generic term meant to describe the combination of a sidecar and driver. "Provisioning" a bucket can mean creating a new bucket or granting access to an existing bucket.
 + _sidecar_ - a Kubernetes-aware container (usually paired with a driver) that is responsible for fullfilling COSI requests with the driver via gRPC calls. The sidecar's access can be restricted to the namespace where it resides, which is expected to be the same namespace as the provisioner. The COSI sidecar is provided by the Kubernetes community.
 + _static provisioning_ - custom resource creation is done by the admin rather than via COSI automation. This may also include _driverless_ but they are independent.
@@ -233,8 +233,7 @@ status:
    - "publicReadOnly": Read only, uncredentialed users can call ListBucket and GetObject.
    - "publicWriteOnly": Write only, uncredentialed users can only call PutObject.
    - "publicReadWrite": Read/Write, same as `ro` with the addition of PutObject being allowed.
-> Note: does not reflect or alter the backing storage ACLs or IAM policies.
-7. `bucketClassName`: Name of the associated bucket class.
+7. `bucketClassName`: (optional for greenfield, omitted for brownfield) name of the associated bucket class. 
 8. `bucketRequest`: an `objectReference` containing the name, namespace and UID of the associated `BucketRequest`.
 9. `allowedNamespaces`: a list of namespaces that are permitted to either create new buckets or to access existing buckets.
 10. `protocol`: protocol-specific field the application will use to access the backend storage.
@@ -290,7 +289,7 @@ The Access APIs abstract the backend policy system.  Access policy and user iden
 
 #### BucketAccessRequest
 
-A user namespaced custom resource representing an object store user and an access policy defining the user’s relation to that storage.  A user creates a `BucketAccessRequest` (BAR) in the app's namespace (which is the same namespace as the `BucketRequest`) A 'BucketAccessRequest' specifies *either* a ServiceAccount or a secret name, and a config map which contains access policy.  Specifying a ServiceAccount enables provisioners to support cloud provider identity integration with their respective Kubernetes offerings.
+A user namespaced custom resource representing an object store user and an access policy defining the user’s relation to that storage.  A user creates a `BucketAccessRequest` (BAR) in the app's namespace (which is the same namespace as the `BucketRequest`) A 'BucketAccessRequest' specifies *either* a ServiceAccount or a secret name which contains access policy.  Specifying a ServiceAccount enables provisioners to support cloud provider identity integration with their respective Kubernetes offerings.
 
 ```yaml
 apiVersion: cosi.io/v1alpha1
@@ -304,18 +303,16 @@ metadata:
   - cosi.io/finalizer [2]
 spec:
   serviceAccountName: [3]
-  accessSecretName: [4]
-  bucketRequestName: [5]
-  bucketAccessClassName: [6]
-  bucketAccessName: [7]
+  bucketRequestName: [4]
+  bucketAccessClassName: [5]
+  bucketAccessName: [6]
 status:
-  accessGranted: [8]
+  accessGranted: [7]
 ```
 
 1. `labels`: added by COSI.  Key’s value should be the provisioner name. Characters that do not adhere to [Kubernetes label conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set) will be converted to ‘-’.
 1. `finalizers`: added by COSI to defer `BucketAccessRequest` deletion until backend deletion ops succeed.
-1. `serviceAccountName`: (optional) the name of a Kubernetes ServiceAccount in the same namespace.  This field is included to support cloud provider identity integration. When supplied, COSI will call the driver to mint new credentials for this ServiceAccount. `serviceAccountName` should not be set when specifying `accessSecretName`.
-1. `accessSecretName`: (optional) the name of a secret in the same namespace.  This field is used when there is no cloud provider identity integration, or the user already has credentials for the backend object store. When supplied, COSI assumes that access is granted to the bucket referenced in the `BucketRequest`, and, thus will not invoke the driver. `accessSecretName` should not be set when specifying `serviceAccountName`.
+1. `serviceAccountName`: (optional) the name of a Kubernetes ServiceAccount in the same namespace.  This field is included to support cloud provider identity integration. When supplied, COSI will call the driver to mint new credentials for this ServiceAccount. 
 1. `bucketRequestName`: (required) the name of the `BucketRequest` associated with this access request. From the bucket request, COSI knows the `Bucket` instance and thus the backend bucket and its properties.
 1. `bucketAccessClassName`: (required) name of the `BucketAccessClass` specifying the desired set of policy actions to be set for a user identity or ServiceAccount.
 1. `bucketAccessName`: name of the bound cluster-scoped `BucketAccess` instance. Set by COSI.
@@ -354,7 +351,7 @@ metadata:
 1. `bucketInstanceName`:  name of the `Bucket` instance bound to this BA.
 1. `bucketAccessRequest`: an `objectReference` containing the name, namespace and UID of the associated `BucketAccessRequest`.
 1. `serviceAccount`: an `objectReference` containing the name, namespace and UID of the associated `ServiceAccount`. Empty when the `BucketAccessRequest.mintedSecretName` is specified.
-1. `mintedSecretName`: name of the provisioner-generated Secret containing access credentials. This Secret exists in the provisioner’s namespace and must be copied to the app namespace by the COSI controller. **Note:** the provisioner's namespace is contained in the registered driver name.
+1. `mintedSecretName`: name of the admin created or provisioner-generated Secret containing access credentials. This Secret exists in the provisioner’s namespace and must be copied to the app namespace by the COSI controller. **Note:** the provisioner's namespace is contained in the registered driver name.
 1. `policyActionsConfigMapData`: encoded data that contains a set of provisioner/platform defined policy actions to a given user identity. Contents of the ConfigMap that the *policyActionsConfigMap* field in the `BucketAccessClass` refers to.
 1. `principal`: username/access-key for the object storage provider to uniquely identify the user who has access to this bucket  
 1. `parameters`:  A map of string:string key values.  Allows admins to control user and access provisioning by setting provisioner key-values. Copied from `BucketAccessClass`. 
@@ -537,7 +534,7 @@ Here is the workflow:
 
 ##  Setting Access Permissions
 ### Dynamic Provisioning
-Incoming `BucketAccessRequest`s either contain a *serviceAccountName* where a cloud provider supports identity integration, or an *accessSecretName*. In both cases, the incoming `BucketAccessRequest` represents a user to access the `Bucket`.
+Incoming `BucketAccessRequest`s contains a *serviceAccountName* where a cloud provider supports identity integration. The incoming `BucketAccessRequest` represents a user to access the `Bucket` and a corresponding `BucketAccess` will provide the access credentials to the workloads using *serviceAccount* or *mintedSecretName* .
 When requesting access to a bucket, workloads will go through the scenarios described here:
 +  New User: In this scenario, we do not have user account in the backend storage system as well as no access for this user to the `Bucket`. 
 	+ Create user account in the backend storage system.
@@ -603,7 +600,7 @@ message ProvisionerGetInfoResponse {
 
 ## ProvisonerCreateBucket
 
-This call is made to create the bucket in the backend. If a bucket that matches both name and parameters already exists, then OK (success) must be returned. If a bucket by same name, but different parameters is provided, then the appropriate error code `ALREADY_EXISTS` must be returned by the provisioner.
+This call is made to create the bucket in the backend. If a bucket that matches both name and parameters already exists, then OK (success) must be returned. If a bucket by same name, but different parameters is provided, then the appropriate error code `ALREADY_EXISTS` must be returned by the provisioner. The call to *ProvisonerCreateBucket* MUST be idempotent.
 
 ```
 message ProvisionerCreateBucketRequest {    
@@ -629,7 +626,7 @@ message ProvisionerCreateBucketResponse {
 
 ## ProvisonerDeleteBucket
 
-This call is made to delete the bucket in the backend. If the bucket has already been deleted, then no error should be returned.
+This call is made to delete the bucket in the backend. If the bucket has already been deleted, then no error should be returned. The call to *ProvisonerDeleteBucket* MUST be idempotent.
 
 ```
 message ProvisionerDeleteBucketRequest {
